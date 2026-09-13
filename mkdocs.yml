@@ -1,5 +1,5 @@
 site_name: Light Router
-site_description: Ultra-low data AI sailing router with extreme event prediction for circumnavigation
+site_description: A communication-constrained, vessel-conditioned weather-routing system that learns the minimum meteorological representation required for near-optimal sailing decisions
 site_author: LowDataSailing
 site_url: https://lowdatasailing.github.io/Light-Router
 
@@ -23,7 +23,6 @@ nav:
       - Research Ideas: research-ideas.md
   - Development:
       - Contributing: CONTRIBUTING.md
-      - Code of Conduct: CODE_OF_CONDUCT.md
   - About: about.md
 
 # Theme
@@ -133,12 +132,8 @@ extra_javascript:
 # Social
 extra:
   social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/LowDataSailing
-    - icon: fontawesome/brands/twitter
-      link: https://twitter.com/LowDataSailing
     - icon: fontawesome/solid/envelope
-      link: mailto:contact@lowdatasailing.org
+      link: mailto:contactlilian3@gmail.com
 
 # Google Analytics
 # google_analytics:
