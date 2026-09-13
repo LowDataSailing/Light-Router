@@ -25,7 +25,6 @@ Intelligence layer (optional): task-oriented weather compression, adaptive vesse
 - [Benchmarking](benchmarking.md)
 - [Market Positioning](market-positioning.md)
 - [Contributing](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Quick Start
 

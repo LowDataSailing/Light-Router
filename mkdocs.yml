@@ -52,8 +52,8 @@ theme:
     - search.suggest
     - search.highlight
     - header.autohide
-  favicon: assets/images/favicon.ico
-  logo: assets/images/logo.png
+  # favicon: assets/images/favicon.ico
+  # logo: assets/images/logo.png
 
 # Extensions
 markdown_extensions:
@@ -123,11 +123,11 @@ plugins:
   #     output_path: pdf/Light-Router-Documentation.pdf
 
 # Extra CSS/JS
-extra_css:
-  - assets/css/custom.css
-
-extra_javascript:
-  - assets/js/custom.js
+# extra_css:
+#   - assets/css/custom.css
+#
+# extra_javascript:
+#   - assets/js/custom.js
 
 # Social
 extra:
