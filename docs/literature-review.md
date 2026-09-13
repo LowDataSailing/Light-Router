@@ -32,7 +32,7 @@
 | Sailmail | HF radio (PACTOR modem) | Via Saildocs | ~$275/year | Up to ~30 KB/message |
 | NOAA WEFAX | HF radio (fax) | Preset charts | Free | N/A (image, no data cost) |
 
-> **Key finding:** Saildocs already implements server-side region, variable, and time filtering — the core techniques proposed for this project. The project's contribution must go beyond manual filtering: route-aware dynamic region selection, AI-driven variable optimization, delta encoding between updates, and ensemble summary compression.
+> Saildocs already implements server-side region, variable, and time filtering. The project's contribution must go beyond manual filtering: route-aware dynamic selection, task-oriented compression, and delta encoding between updates.
 
 ### Academic Research
 
@@ -54,27 +54,27 @@
 
 ### Extreme Event Prediction
 - No commercial sailing tool offers rogue wave or microburst detection
-- StormGeo offers iceberg detection at enterprise level only
+- [StormGeo AWT](https://www.stormgeo.com) offers iceberg detection at enterprise level only
 - Academic research on extreme event detection exists but is not sailing-specific
 
 ### Ensemble-Based Probabilistic Routing
 - No sailing tool uses ensemble forecasts for probabilistic routing
-- Research exists for commercial shipping (Ocean Engineering, JMSE) but not for sailing
-- Key opportunity: download ensemble summary statistics (mean, spread, percentiles) instead of all members
+- Research exists for commercial shipping ([Ocean Engineering](https://doi.org/10.3390/jmse9121434), [JMSE](https://www.mdpi.com/2077-1312/13/5/902)) but not for sailing
+- Opportunity: download ensemble summary statistics (mean, spread, percentiles) instead of all members
 
 ### Edge Deployment
 - Most tools require desktop or mobile environments
-- Target: Raspberry Pi compatible with <500 MB RAM, <1 minute inference
+- Target: Raspberry Pi compatible with <500 MB RAM, <60 min planning inference
 
 ## References
 
-- **PredictWind:** [https://www.predictwind.com](https://www.predictwind.com) / [Offshore app tips](https://help.predictwind.com/en/articles/11085388-offshore-app-tips-and-tricks)
-- **qtVlm:** [https://sourceforge.net/projects/qtvlm/](https://sourceforge.net/projects/qtvlm/) — [license info](https://www.meltemus.com/index.php/en/forum/qtvlm-application/93-software-license) (not open source)
-- **libweatherrouting:** [https://github.com/dakk/libweatherrouting](https://github.com/dakk/libweatherrouting)
-- **OpenCPN Weather Routing:** [https://opencpn.org/OpenCPN/plugins/weatherroute.html](https://opencpn.org/OpenCPN/plugins/weatherroute.html)
-- **SIMROUTE:** [https://github.com/ManelGrifoll/SIMROUTE](https://github.com/ManelGrifoll/SIMROUTE) — published in Ocean Engineering
-- **Saildocs:** [http://www.saildocs.com](http://www.saildocs.com)
-- **Latinopoulos et al. (2025):** [https://www.mdpi.com/2077-1312/13/5/902](https://www.mdpi.com/2077-1312/13/5/902)
-- **Anderson et al. (2022):** [https://dl.acm.org/doi/10.1145/3581792.3581803](https://dl.acm.org/doi/10.1145/3581792.3581803)
-- **Chalmers isochrone study (2024):** [https://www.tandfonline.com/doi/full/10.1080/17445302.2024.2329011](https://www.tandfonline.com/doi/full/10.1080/17445302.2024.2329011)
-- **Ensemble routing (JMSE 2021):** [https://doi.org/10.3390/jmse9121434](https://doi.org/10.3390/jmse9121434)
+- [PredictWind](https://www.predictwind.com) / [Offshore app tips](https://help.predictwind.com/en/articles/11085388-offshore-app-tips-and-tricks)
+- [qtVlm](https://sourceforge.net/projects/qtvlm/) ([license info](https://www.meltemus.com/index.php/en/forum/qtvlm-application/93-software-license), not open source)
+- [libweatherrouting](https://github.com/dakk/libweatherrouting)
+- [OpenCPN Weather Routing](https://opencpn.org/OpenCPN/plugins/weatherroute.html)
+- [SIMROUTE](https://github.com/ManelGrifoll/SIMROUTE) (published in Ocean Engineering)
+- [Saildocs](http://www.saildocs.com)
+- [Latinopoulos et al. (2025)](https://www.mdpi.com/2077-1312/13/5/902)
+- [Anderson et al. (2022)](https://dl.acm.org/doi/10.1145/3581792.3581803)
+- [Chalmers isochrone study (2024)](https://www.tandfonline.com/doi/full/10.1080/17445302.2024.2329011)
+- [Ensemble routing (JMSE 2021)](https://doi.org/10.3390/jmse9121434)

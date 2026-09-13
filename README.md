@@ -1,18 +1,16 @@
 # Light Router
 
-**A communication-constrained, vessel-conditioned weather-routing system that learns the minimum meteorological representation required to make near-optimal sailing decisions.**
-
----
+A communication-constrained, vessel-conditioned weather-routing system that learns the minimum meteorological representation required to make near-optimal sailing decisions.
 
 ## Objectives
 
-1. **Low-bandwidth routing** — How much weather information does a sailing router actually need? Characterize the degradation curve: route quality as a function of daily data budget (from 1 KB to unlimited).
-2. **Task-oriented compression** — Don't reconstruct weather accurately; reconstruct only enough to preserve the routing decision. The loss function is routing performance degradation, not weather reconstruction error.
-3. **Learned vessel performance** — Start from manufacturer polars, learn corrections from real-world observations, and condition weather representation on vessel characteristics.
+1. Characterize the degradation curve: route quality as a function of daily data budget (1 KB to unlimited).
+2. Task-oriented compression: compress weather only enough to preserve the routing decision, not weather fidelity.
+3. Learned vessel performance: start from manufacturer polars, learn corrections from real-world observations.
 
 ## Status
 
-This repository currently contains **research and architectural documentation**. Source code, benchmarks, and configs will be added as the project develops. See the [documentation site](https://lowdatasailing.github.io/Light-Router/) for the full specification.
+Research and architectural documentation only. Source code, benchmarks, and configs will be added as the project develops. See the [documentation site](https://lowdatasailing.github.io/Light-Router/) for the full specification.
 
 ## Quick Start
 
@@ -22,10 +20,6 @@ cd Light-Router
 uv sync --group docs
 make docs-serve
 ```
-
-> Implementation is not yet available. The repository is at the specification and research stage.
-
----
 
 ## Structure
 
@@ -51,20 +45,17 @@ Key documents:
 
 ## Architecture
 
-The system is built around a **deterministic core** with an **optional intelligence layer**:
+Deterministic core (100%): weather ingestion, compression, cache, adaptive querying, isochrone routing, safety constraints. The vessel routes with no cloud dependency after receiving weather data.
 
-- **Core (100% deterministic):** weather ingestion, compression, cache, adaptive querying, isochrone routing, safety constraints. The vessel must be able to route with no cloud dependency after receiving weather data.
-- **Intelligence (optional):** learned forecast-error correction, learned data-request policy, task-oriented weather compression, adaptive vessel-performance model. If the AI layer fails, the router still works.
+Intelligence layer (optional): learned forecast-error correction, task-oriented weather compression, adaptive vessel-performance model, data-request policy. If the AI layer fails, the router still works. See [Research Ideas](docs/research-ideas.md) for the joint encoder-router target architecture.
 
 ## Potential Collaborations
 
-- **Infoclimat** — Potential weather data provider (GRIB2, wave models)
-- **Freewinds.world** — Potential simulation and testing platform
-- **Open source community** — libweatherrouting, OpenCPN Weather Routing, SIMROUTE
-- **Public data sources** — NOAA, ECMWF (open data since Oct 2025), Copernicus Marine Service
+- [Infoclimat](https://www.infoclimat.fr) — potential weather data provider (GRIB2, wave models)
+- [Freewinds.world](https://freewinds.world) — potential simulation and testing platform
+- Open source community: [libweatherrouting](https://github.com/dakk/libweatherrouting), [OpenCPN Weather Routing](https://opencpn.org/OpenCPN/plugins/weatherroute.html), [SIMROUTE](https://github.com/ManelGrifoll/SIMROUTE)
+- Public data sources: [NOAA](https://nomads.ncep.noaa.gov), [ECMWF](https://data.ecmwf.int) (open data since Oct 2025), [Copernicus Marine Service](https://marine.copernicus.eu)
 
----
+## License
 
-## **📜 License**
-
-MIT © 2026 LowDataSailing
+MIT (c) 2026 LowDataSailing

@@ -1,46 +1,31 @@
 # Objectives
 
-Based on comprehensive literature review of meteorological information transfer and routing algorithms, the following **precise objectives** define what can be improved and the challenges to address.
-
----
-
 ## Core Research Question
 
-> **How much weather information does a sailing router actually need?**
+> How much weather information does a sailing router actually need?
 
-This is not "how much can we compress a GRIB file?" — it is "how much weather information is necessary to preserve the routing decision?" The loss function is routing performance degradation, not weather reconstruction error.
+The loss function is routing performance degradation, not weather reconstruction error.
 
----
+## Goal 1: Bandwidth-Quality Degradation Curve
 
-## Goal 1: Characterize the Bandwidth-Quality Degradation Curve
+Measure route quality as a function of daily data budget (1 KB to unlimited). Discover under what conditions 10 KB/day is sufficient and where performance collapses.
 
-**Target:** Measure route quality as a function of daily data budget, from 1 KB/day to unlimited, and discover under what conditions 10 KB/day is sufficient and where performance collapses.
-
-### What We Need to Build
-
-A baseline system: GRIB parser, weather grid, boat polar, isochrone router. One route. No AI, no compression innovation. Just make it work.
-
-Then progressively constrain the data budget:
+Build a baseline: GRIB parser, weather grid, boat polar, isochrone router, one route. No AI, no compression. Then progressively constrain the data budget:
 
 ```
-1 MB → 500 KB → 250 KB → 100 KB → 50 KB → 25 KB → 10 KB → 5 KB → 2 KB → 1 KB
+1 MB -> 500 KB -> 250 KB -> 100 KB -> 50 KB -> 25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB
 ```
 
-and measure:
-
+Measure at each level:
 - ETA error vs. full-information baseline
 - Route distance difference
 - VMG difference
 - Maximum wind/wave exposure
 - Time spent in unsafe conditions
-- Route divergence (geographic distance between full-data and compressed-data trajectories)
+- Route divergence (geographic distance between trajectories)
 - Decision divergence (did the compressed system choose the same tactical decision?)
 
-### The Degradation Curve
-
-The headline result is not "Light Router uses 10 KB/day." It is:
-
-> **Light Router produces X% of full-information routing performance using Y bytes/day.**
+The headline result: "Light Router produces X% of full-information routing performance using Y bytes/day."
 
 | Daily Budget | Route Performance (hypothetical) |
 |-------------:|--------------------------------:|
@@ -51,378 +36,163 @@ The headline result is not "Light Router uses 10 KB/day." It is:
 | 25 KB | 98% |
 | Unlimited | 100% |
 
-This curve is the project's most important research result. It gives a clear optimization objective:
-
-```
-maximize route quality
-subject to B <= budget bytes/day
-```
+Optimization objective: maximize route quality subject to B <= budget bytes/day.
 
 ### Adaptive Bandwidth Allocation
 
-Instead of a fixed 10 KB/day target, the deeper question is: what is the minimum bandwidth required for the current decision?
+The minimum bandwidth depends on the routing situation:
+- Open ocean, steady trade winds: ~5 KB
+- Approaching a storm system: ~15 KB
+- Coastal navigation with complex currents: ~50 KB
+- Complex meteorological transition zone: ~30 KB
 
-- Open ocean, steady trade winds: 5 KB may suffice
-- Approaching a storm system: 15 KB needed
-- Coastal navigation with complex currents: 50 KB needed
-- Complex meteorological transition zone: 30 KB needed
-
-The router should dynamically allocate its bandwidth budget based on the routing situation.
-
-### What Can Be Improved
+### Compression Techniques
 
 Based on current state of the art in [meteorological-info-transfer.md](./meteorological-info-transfer.md):
 
-1. **Route-aware dynamic region filtering**
-   - Current tools (Saildocs, NOMADS Grib Filter, PredictWind) already do region/variable/time filtering server-side
-   - **Improvement:** Optimize the region selection dynamically based on route evolution, not just a static bounding box
-   - Potential savings: 80-95% vs. full global (from 500 MB to 25-50 KB per update)
-   - Note: Region filtering itself is not novel. Route-aware dynamic selection is the contribution.
-
-2. **Delta encoding**
-   - Current: Not used in sailing tools
-   - **Improvement:** Transmit only forecast changes between updates
-   - Potential savings: 70-90% for sequential forecasts
-   - **Challenge:** Iridium SBD is a message-based protocol (up to 1960 bytes MO, 1890 bytes MT), not a session. Delta encoding requires both sides to maintain state about the previous forecast. If a message is lost, the delta is useless without the base. This needs an application-layer reliability mechanism. Feasibility is Medium, not High. See [meteorological-info-transfer.md](./meteorological-info-transfer.md).
-
-3. **Variable filtering**
-   - Download only essential variables for routing (wind, waves, pressure)
-   - Potential savings: 50-80% reduction
-
-4. **Temporal downsampling**
-   - Lower resolution for distant forecasts (0-24h: 0.25 deg, 24-72h: 0.5 deg, 72h+: 1.0 deg)
-   - Potential savings: 50-80% reduction
+1. Route-aware dynamic region filtering — Saildocs and NOMADS already do region/variable/time filtering. The contribution is dynamic selection based on route evolution, not static bounding boxes. Savings: 80-95% vs. full global.
+2. Delta encoding — transmit only forecast changes. Savings: 70-90%. Challenge: Iridium SBD is message-based (up to 1960 bytes MO / 1890 bytes MT), not a session. Lost messages make deltas useless without the base. Requires application-layer reliability. Feasibility: Medium.
+3. Variable filtering — download only essential variables (wind, waves, pressure). Savings: 50-80%.
+4. Temporal downsampling — lower resolution for distant forecasts (0-24h: 0.25 deg, 24-72h: 0.5 deg, 72h+: 1.0 deg). Savings: 50-80%.
 
 ### Challenges
 
-1. **Techniques interact.** The combined savings of region filtering, variable filtering, temporal downsampling, and delta encoding cannot be multiplied naively (80% x 80% x 80% does not automatically mean 99.2% reduction). An empirical curve is needed.
-2. **Satellite constraints.** Iridium SBD: up to 1960 bytes per message, $0.50-5.00/MB. Message chunking and reassembly needed.
-3. **Stateful connections.** Delta encoding requires maintaining state between updates. Difficult with satellite connections that may drop.
-4. **Baseline matters.** The <10 KB/day target is a 10-50x improvement over the best existing filtered tools (Saildocs at 2-30 KB per manual request, PredictWind at ~150 KB/day automated), not a 1000x improvement over raw global downloads.
-
----
+- Techniques interact — combined savings cannot be multiplied naively. An empirical curve is needed.
+- Satellite constraints — Iridium SBD: up to 1960 bytes per message, $0.50-5.00/MB.
+- Delta encoding requires stateful connections — difficult with satellite connections that may drop.
+- Baseline matters — <10 KB/day is a 10-50x improvement over best existing filtered tools (Saildocs 2-30 KB/request, PredictWind ~150 KB/day), not a 1000x improvement over raw global downloads.
 
 ## Goal 2: Task-Oriented Weather Compression
 
-**Target:** Learn a compressed weather representation that preserves routing decisions, not weather fidelity.
-
-### The Key Insight
+Learn a compressed weather representation that preserves routing decisions, not weather fidelity.
 
 Traditional compression asks: "How accurately can I reconstruct the original data with N bytes?"
-
 Task-oriented compression asks: "How accurately can I reproduce the sailing decision with N bytes?"
 
-These are not the same thing. A 90% weather reconstruction may produce an identical route. A 98% weather reconstruction that slightly shifts a storm boundary may produce a completely different (and worse) route.
+A 90% weather reconstruction may produce an identical route. A 98% reconstruction that shifts a storm boundary may produce a completely different route.
 
-### Approach
+### Statistical compression (no ML)
 
-#### Statistical compression (no ML)
+Progressive grid aggregation: transmit summary statistics (mean, median, variance, min/max, quantiles, spatial gradients, temporal derivatives) per coarser grid cell. Measure at what aggregation level the optimal sailing decision starts changing.
 
-Start with progressive grid aggregation. Instead of transmitting full grid cells, transmit summary statistics:
+### Learned compression (Level 3)
 
-- mean / median / variance per coarser grid cell
-- min / max / quantiles
-- spatial gradients
-- temporal derivatives
-
-Then measure: at what aggregation level does the optimal sailing decision start changing?
-
-This is already a valuable experiment. A grid region with uniform wind can be replaced by its mean. A region with a storm embedded in it cannot — mean alone would destroy the critical feature.
-
-#### Learned compression (ML)
-
-Train an encoder to produce a compact latent representation of the weather grid. The decoder reconstructs weather information for the routing solver.
-
-**Critical design choice:** Do not train the encoder-decoder to minimize weather reconstruction error. Train it to minimize routing performance degradation.
+Train a neural encoder-decoder. The encoder produces a compact latent representation; the decoder reconstructs weather for the isochrone solver. Train to minimize routing performance degradation, not weather reconstruction error.
 
 ```
-FULL WEATHER GRID
-       |
-       v
-  Neural Encoder
-       |
-       v
-  latent vector (N bytes)
-       |
-       v
-  transmit
-       |
-       v
-  Neural Decoder
-       |
-       v
-  reconstructed weather (for isochrone solver)
-       |
-       v
-  ROUTE (compare to full-information reference route)
+weather -> encoder -> latent (N bytes) -> transmit -> decoder -> isochrone -> ROUTE
 ```
 
-The loss function is:
+Loss: `L = alpha * reconstruction_error + beta * routing_degradation` (beta should dominate).
+
+### Joint encoder-router (Level 4 — target)
+
+Train the encoder and router jointly end-to-end. The router learns to operate directly in the compressed representation space. No intermediate weather reconstruction.
 
 ```
-L = alpha * weather_reconstruction_error + beta * routing_performance_degradation
+weather + vessel state -> encoder -> latent (N bytes) -> decoder-router -> candidate route
+  -> isochrone refinement + safety check -> final ROUTE
 ```
 
-where beta should dominate.
-
-#### Joint encoder-router (target architecture)
-
-Instead of decoding weather and feeding it to a classical router, train the encoder and router jointly end-to-end. The router learns to operate directly in the compressed representation space. See [Research Ideas](research-ideas.md) for the full architecture, connections to JEPA, Information Bottleneck, and World Models.
-
-```
-weather + vessel state
-       |
-       v
-   encoder (what to keep / how to compress)
-       |
-       v
-   compact representation (N bytes)
-       |
-       v
-   decoder-router (route directly from compact representation)
-       |
-       v
-   candidate ROUTE
-       |
-       v
-   isochrone refinement + safety check
-       |
-       v
-   final ROUTE
-```
-
-The isochrone remains as a safety fallback: it refines the DL candidate route and catches failures. The DL router can take 30-60 minutes (planning); the isochrone refinement is seconds (tactical).
+The isochrone remains as a safety fallback. The DL router can take 30-60 minutes (planning); isochrone refinement is seconds (tactical). See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
 
 ### Ground Truth
 
-Use full-resolution weather + best available conventional router (isochrone with full GRIB) as the **full-information reference route**. Not "ground truth" — the forecast itself is uncertain and the polar is imperfect. This is an oracle under the chosen weather forecast, polar model, and routing algorithm.
-
-Then separately validate against reality: forecast -> route -> actual observed sailing.
-
----
+Use full-resolution weather + isochrone router as the full-information reference route. Not "ground truth" — the forecast is uncertain and the polar is imperfect. This is an oracle under the chosen weather forecast, polar model, and routing algorithm. Validate separately against reality: forecast -> route -> actual observed sailing.
 
 ## Goal 3: Learned Vessel Performance
 
-**Target:** Build an adaptive vessel-performance model that starts from the manufacturer polar and learns corrections from real-world observations.
+Build an adaptive vessel-performance model starting from the manufacturer polar, learning corrections from real-world observations.
 
-### Why the Polar Matters
-
-The polar diagram is the bridge between the weather model and the boat. Traditional weather routers (LuckGrib, SailGrib, qtVlm) all use polars: V = f(TWS, TWA). This is already standard.
-
-The traditional polar is static. Reality is not. Actual boat speed depends on:
+The polar diagram is the bridge between weather and boat. Traditional routers (LuckGrib, SailGrib, qtVlm) all use polars: V = f(TWS, TWA). The traditional polar is static. Reality is not:
 
 ```
 V = f(TWS, TWA, waves, current, heel, sail config, reefing,
       displacement, boat condition, crew behavior, tack/gybe, fatigue, ...)
 ```
 
-### What Already Exists
+What already exists: PredictWind "AI Polars" (commercial), University of Rostock [AI Sailing](https://www.mathematik.uni-rostock.de/en/ai-sail/) (academic), Random Forest models, physics-guided ML (SPAM). AI polars are not novel individually. The novel combination is: learned vessel performance + task-oriented weather compression + bandwidth constraint.
 
-- PredictWind has an "AI Polars" feature using stored polar + DataHub data
-- Academic work: Random Forest models for polar generation, physics-guided ML (SPAM), ANN-based performance prediction
-- University of Rostock AI Sailing project: tooling for generating polars from measurements
+Approach: start with manufacturer polar, observe (GPS speed, wind, heading, heel, sail config, waves, current), learn corrections, build personalized polar.
 
-AI polars are not novel individually. The interesting combination is: learned vessel performance + task-oriented weather compression + bandwidth constraint.
-
-### Approach
-
-1. Start with manufacturer polar
-2. Observe: GPS speed, wind speed/direction, heading, heel, sail configuration, wave conditions, current
-3. Learn corrections: model predicts 7.3 kt at 14 kt TWS / 110 TWA, actual is 6.5 kt
-4. After sufficient observations: personalized polar that routes this specific boat in its current state
-
-### Where Transformers Could Help
-
-Boat performance has temporal dependence. The boat's speed at time t may depend on the recent sequence (sail changes take time, waves have memory, boat acceleration has dynamics, crew doesn't instantly react).
-
-A transformer can model that temporal context:
-
-```
-V_t = f(X_{t-n}, ..., X_{t-1}, X_t)
-```
-
-This is more interesting than replacing a lookup table with a neural network.
-
----
+Transformers could model temporal dependence in boat performance (sail changes take time, waves have memory, boat acceleration has dynamics): V_t = f(X_{t-n}, ..., X_{t-1}, X_t).
 
 ## Goal 4: Safety Under Forecast Uncertainty
 
-**Target:** Minimize probability of exposure to predefined hazardous conditions under forecast uncertainty.
+Minimize probability of exposure to predefined hazardous conditions under forecast uncertainty.
 
-### v1 Safety Scope (included)
+v1 scope: gale/storm identification (threshold + forecast-disagreement), extreme wind/wave exposure, rapidly deteriorating conditions, forecast disagreement quantification.
 
-- Gale/storm identification (threshold-based + forecast-disagreement detection)
-- Extreme wind exposure
-- Extreme wave height
-- Rapidly deteriorating conditions
-- Forecast disagreement / uncertainty quantification
+Deferred: rogue-wave prediction (limited historical data), iceberg detection (requires satellite imagery — shore-side), microburst prediction (requires high-res wind data >1 km).
 
-### Future Modules (deferred from v1)
-
-- Rogue-wave prediction: historical observations are limited; a model with 95% accuracy can still be useless for rare catastrophic events. Defer until sufficient data exists.
-- Iceberg detection: requires satellite imagery, which is architecturally incompatible with a 10 KB/day on-vessel budget. Could be handled by a shore-side service (heavy compute on shore, compact hazard alert downlinked to vessel). Defer until shore/vessel architecture is implemented.
-- Microburst prediction: requires high-resolution wind data (>1 km), which is not available at the bandwidths targeted. Defer.
-
-### Probabilistic Safety Metrics
-
-Instead of undefined "99% safety," use measurable probabilistic definitions:
-
-- P(Wind > 40 kt | forecast) — route around areas where this exceeds a threshold
+Probabilistic safety metrics:
+- P(Wind > 40 kt | forecast) — route around areas exceeding a threshold
 - P(H_s > 6 m | forecast) — significant wave height exceedance probability
 - P(rapid deterioration | forecast) — probability of conditions worsening faster than a defined rate
 
-Route to minimize expected exposure to hazardous conditions, weighted by severity.
-
----
-
 ## Four-Level Experimental Design
 
-Every goal above fits into a layered experimental design where each layer has a baseline:
+| Level | Weather | Vessel Model | Router | Purpose |
+|-------|---------|-------------|--------|---------|
+| 1. Classical | Full GRIB | Static polar | Isochrone | Full-information reference route (oracle) |
+| 2. Compressed | Statistical aggregation | Static polar | Isochrone | Measure compression-only degradation |
+| 3. Learned compression | Neural encoder-decoder | Learned polar | Isochrone | Measure whether ML compression recovers lost performance |
+| 4. Joint encoder-router | Neural encoder | Learned polar | DL router + isochrone fallback | Measure whether joint training beats separate compression + routing |
 
-### Level 1: Classical (full information)
+Level 3 (stepping stone): ML serves the router, does not replace it. Safer, isolates compression contribution.
 
-```
-Full GRIB + static polar + isochrone router = full-information reference route
-```
-
-This is the oracle. All comparisons are relative to this.
-
-### Level 2: Compressed (no ML)
-
-```
-Compressed GRIB (statistical aggregation) + static polar + isochrone router
-```
-
-Measure how much compression is possible without route degradation.
-
-### Level 3: Learned compression (ML, separate from router)
-
-```
-Compressed weather (neural encoder-decoder) + learned vessel model + isochrone router
-```
-
-The neural network serves the router (compression + vessel model), it does not replace it. Measure whether the learned compression recovers performance that conventional compression loses.
-
-```
-              WEATHER
-                 |
-         +------+------+
-         |             |
-   Classical data   ML encoder
-    processing         |
-         |             |
-         +------+------+
-                v
-         compact forecast
-                |
-                v
-         ISOCHRONE SOLVER
-                |
-                v
-              ROUTE
-```
-
-This gives interpretability + deterministic routing + ML compression. It is the stepping stone — safer and easier to debug.
-
-### Level 4: Joint encoder-router (ML handles compression AND routing)
-
-```
-Compressed weather (neural encoder) + learned vessel model
-       |
-       v
-   decoder-router (routes directly from compressed representation)
-       |
-       v
-   candidate route
-       |
-       v
-   isochrone refinement + safety check
-       |
-       v
-   final ROUTE
-```
-
-The encoder and router are trained jointly end-to-end. The router learns to operate in the compressed representation space. The isochrone remains as a safety fallback — it refines the DL candidate and catches failures. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
-
-This is the target architecture. It is riskier (black-box router) but potentially more powerful (encoder and router co-adapt). The hybrid safety layer mitigates the risk.
-
----
+Level 4 (target): encoder and router co-adapt. Riskier (black-box router) but potentially more powerful. Isochrone safety layer mitigates risk.
 
 ## Success Metrics
 
-### Bandwidth-Quality Metrics
+### Bandwidth-Quality
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | Degradation curve | Characterized from 1 KB to unlimited | Route quality at each budget level |
 | Daily data usage | <10 KB/day (target operating point) | Monitor all downloads |
-| Route quality vs. full-information | Report multiple metrics separately | Compare compressed vs. full-data route |
 
-### Route Quality Metrics (reported separately, not combined)
+### Route Quality (reported separately)
 
 | Metric | Definition | Measurement |
 |--------|-----------|-------------|
 | ETA difference | (ETA_compressed - ETA_full) / ETA_full | Compare routes |
 | Distance difference | (dist_compressed - dist_full) / dist_full | Compare routes |
 | Max wind exposure | Difference in maximum wind encountered | Compare routes |
-| Unsafe-hours exposure | Difference in time spent in unsafe conditions | Compare routes |
-| Decision divergence | Did the compressed system choose the same tactical decision? | Compare route topology |
-| Geographic route divergence | Distance between the two trajectories | Compare paths |
+| Unsafe-hours exposure | Difference in time in unsafe conditions | Compare routes |
+| Decision divergence | Same tactical decision? | Compare route topology |
+| Geographic route divergence | Distance between trajectories | Compare paths |
 
-### Safety Metrics
+### Safety
 
 | Metric | Definition | Target |
 |--------|-----------|--------|
-| P(Wind > threshold) | Probability of exceeding wind threshold given forecast | Minimize |
-| P(H_s > threshold) | Probability of exceeding wave height threshold | Minimize |
-| Forecast disagreement | Spread across ensemble members along route | Report |
+| P(Wind > threshold) | Exceedance probability given forecast | Minimize |
+| P(H_s > threshold) | Wave height exceedance probability | Minimize |
+| Forecast disagreement | Ensemble spread along route | Report |
 
-### Computational Metrics
+### Computational
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Planning inference time | <60 min (relaxed — planning decision, not real-time) | Wall-clock |
+| Planning inference time | <60 min | Wall-clock |
 | Tactical inference time | <1 min (isochrone fallback) | Wall-clock |
 | Memory usage | <500 MB | RAM monitoring |
-| Energy per route | Report (Wh per calculation) | Power draw x inference time |
-| Offline operation | Route with no cloud dependency after receiving weather data | Cold-start test |
-
----
+| Energy per route | Report (Wh) | Power draw x inference time |
+| Offline operation | No cloud dependency after receiving weather data | Cold-start test |
 
 ## Implementation Roadmap
 
-### Month 1: Baseline
-
-Build: GRIB -> parser -> weather grid -> polar -> isochrone router, with one route. No AI, no compression innovation. Just make it work.
-
-### Month 2: Bandwidth Simulator
-
-Create: full weather -> compression/query layer -> 1 KB / 2 KB / 5 KB / 10 KB / 25 KB. Benchmark route degradation. This is where the research starts becoming real.
-
-### Month 3: Adaptive Information Acquisition
-
-Add: current route -> forecast uncertainty -> candidate weather requests -> value-per-byte scoring -> best request. This is the actual Light Router research contribution.
-
-### Month 4: Learned Compression and Vessel Models
-
-Train neural encoders for task-oriented compression (Level 3). Learn vessel-performance corrections. Experiment with vessel-conditioned weather representation.
-
-### Month 5+: Joint Encoder-Router
-
-Train the encoder and router jointly end-to-end (Level 4). Experiment with JEPA-style prediction in embedding space. Add the isochrone safety layer. Compare against Level 3 to measure whether joint training beats separate compression + routing.
-
----
+1. Month 1 — Baseline: GRIB -> parser -> weather grid -> polar -> isochrone router, one route. No AI.
+2. Month 2 — Bandwidth simulator: compression/query layer at 1 KB / 2 KB / 5 KB / 10 KB / 25 KB. Benchmark route degradation.
+3. Month 3 — Adaptive information acquisition: route -> forecast uncertainty -> candidate weather requests -> value-per-byte scoring -> best request.
+4. Month 4 — Learned compression and vessel models (Level 3): neural encoders, vessel-performance corrections.
+5. Month 5+ — Joint encoder-router (Level 4): end-to-end training, JEPA-style prediction, isochrone safety layer. Compare against Level 3.
 
 ## References
 
-- **Meteorological Info Transfer:** [./meteorological-info-transfer.md](./meteorological-info-transfer.md)
-- **Routing Algorithms:** [./routing-algorithms.md](./routing-algorithms.md)
-- **Research Ideas:** [./research-ideas.md](./research-ideas.md)
-- **Benchmarking:** [./benchmarking.md](./benchmarking.md)
-- **Current Tools Comparison:** [./literature-review.md](./literature-review.md)
-
----
-
-(c) 2026 LowDataSailing
-**Last Updated:** September 2026
-**Version:** 2.0
+- [Meteorological Info Transfer](meteorological-info-transfer.md)
+- [Routing Algorithms](routing-algorithms.md)
+- [Research Ideas](research-ideas.md)
+- [Benchmarking](benchmarking.md)
+- [Literature Review](literature-review.md)
