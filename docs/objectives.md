@@ -24,17 +24,23 @@ Measure at each level:
 - Time spent in unsafe conditions
 - Route divergence (geographic distance between trajectories)
 - Decision divergence (did the compressed system choose the same tactical decision?)
+- Decision boundary (at what budget does the routing decision flip? e.g., go north at 10 KB, go south at 2 KB)
+
+Additionally, measure the value of individual weather variables:
+- Remove variables one at a time (wind, waves, current, pressure) and measure route quality impact
+- This produces a per-variable value ranking that feeds adaptive variable selection
 
 The headline result: "Light Router produces X% of full-information routing performance using Y bytes/day."
 
-| Daily Budget | Route Performance (hypothetical) |
-|-------------:|--------------------------------:|
-| 1 KB | 82% |
-| 2 KB | 87% |
-| 5 KB | 92% |
-| 10 KB | 96% |
-| 25 KB | 98% |
-| Unlimited | 100% |
+| Daily Budget | Route Performance |
+|-------------:|------------------:|
+| 1 KB | ? |
+| 2 KB | ? |
+| 5 KB | ? |
+| 10 KB | ? |
+| 25 KB | ? |
+| 50 KB | ? |
+| Unlimited | 100% (reference) |
 
 Optimization objective: maximize route quality subject to B <= budget bytes/day.
 
@@ -85,14 +91,16 @@ weather -> encoder -> latent (N bytes) -> transmit -> decoder -> isochrone -> RO
 
 Loss: `L = alpha * reconstruction_error + beta * routing_degradation` (beta should dominate).
 
-### Joint encoder-router (Level 4 — target)
+### Joint encoder-router (Level 4 — optional extension)
 
 Train the encoder and router jointly end-to-end. The router learns to operate directly in the compressed representation space. No intermediate weather reconstruction.
 
 ```
-weather + vessel state -> encoder -> latent (N bytes) -> decoder-router -> candidate route
+weather + vessel state -> encoder -> latent (N bytes) -> routing head -> candidate route
   -> isochrone refinement + safety check -> final ROUTE
 ```
+
+Level 4 is optional. If Level 3 achieves 10 KB/day at 95%+ route quality, the project is already successful. Level 4 asks: "Can joint training do even better?"
 
 The isochrone remains as a safety fallback. The DL router can take 30-60 minutes (planning); isochrone refinement is seconds (tactical). See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
 
@@ -130,18 +138,22 @@ Probabilistic safety metrics:
 - P(H_s > 6 m | forecast) — significant wave height exceedance probability
 - P(rapid deterioration | forecast) — probability of conditions worsening faster than a defined rate
 
-## Four-Level Experimental Design
+## Experimental Design
 
 | Level | Weather | Vessel Model | Router | Purpose |
 |-------|---------|-------------|--------|---------|
 | 1. Classical | Full GRIB | Static polar | Isochrone | Full-information reference route (oracle) |
 | 2. Compressed | Statistical aggregation | Static polar | Isochrone | Measure compression-only degradation |
-| 3. Learned compression | Neural encoder-decoder | Learned polar | Isochrone | Measure whether ML compression recovers lost performance |
-| 4. Joint encoder-router | Neural encoder | Learned polar | DL router + isochrone fallback | Measure whether joint training beats separate compression + routing |
+| 3A. Learned compression | Neural encoder-decoder | Static polar | Isochrone | Does ML compression recover lost performance? |
+| 3B. Learned polar | Full GRIB | Learned polar | Isochrone | Does learned vessel model improve routing? |
+| 3C. Both | Neural encoder-decoder | Learned polar | Isochrone | Interaction between compression and vessel model |
+| 4. Joint encoder-router | Neural encoder | Learned polar | Routing head + isochrone fallback | Can joint training beat separate compression + routing? |
 
-Level 3 (stepping stone): ML serves the router, does not replace it. Safer, isolates compression contribution.
+Levels 3A and 3B must be tested separately before combining (3C). Otherwise, if performance improves, you cannot determine whether the gain came from the weather representation, the learned polar, or their interaction.
 
-Level 4 (target): encoder and router co-adapt. Riskier (black-box router) but potentially more powerful. Isochrone safety layer mitigates risk.
+Level 3 (stepping stone): ML serves the router, does not replace it. Safer, isolates contributions.
+
+Level 4 (optional extension): encoder and routing head co-adapt. Riskier (black-box router) but potentially more powerful. Isochrone safety layer mitigates risk. If Level 3 is successful, Level 4 is a bonus, not a requirement.
 
 ## Success Metrics
 
@@ -161,6 +173,8 @@ Level 4 (target): encoder and router co-adapt. Riskier (black-box router) but po
 | Max wind exposure | Difference in maximum wind encountered | Compare routes |
 | Unsafe-hours exposure | Difference in time in unsafe conditions | Compare routes |
 | Decision divergence | Same tactical decision? | Compare route topology |
+| Decision boundary | Budget at which routing decision flips | Progressively degrade until route changes |
+| Variable value | Route quality impact per weather variable | Remove variables one at a time |
 | Geographic route divergence | Distance between trajectories | Compare paths |
 
 ### Safety
@@ -183,11 +197,11 @@ Level 4 (target): encoder and router co-adapt. Riskier (black-box router) but po
 
 ## Implementation Roadmap
 
-1. Month 1 — Baseline: GRIB -> parser -> weather grid -> polar -> isochrone router, one route. No AI.
-2. Month 2 — Bandwidth simulator: compression/query layer at 1 KB / 2 KB / 5 KB / 10 KB / 25 KB. Benchmark route degradation.
+1. Month 1 — Baseline (Level 1): GRIB -> parser -> weather grid -> polar -> isochrone router, one route. No AI.
+2. Month 2 — Bandwidth simulator (Level 2): compression/query layer at 1 KB / 2 KB / 5 KB / 10 KB / 25 KB. Benchmark route degradation.
 3. Month 3 — Adaptive information acquisition: route -> forecast uncertainty -> candidate weather requests -> value-per-byte scoring -> best request.
-4. Month 4 — Learned compression and vessel models (Level 3): neural encoders, vessel-performance corrections.
-5. Month 5+ — Joint encoder-router (Level 4): end-to-end training, JEPA-style prediction, isochrone safety layer. Compare against Level 3.
+4. Month 4 — Learned compression (Level 3A): neural encoders for task-oriented compression. Vessel-performance corrections (Level 3B). Test separately, then combine (Level 3C).
+5. Month 5+ — Joint encoder-router (Level 4, optional): end-to-end training, JEPA-style prediction, isochrone safety layer. Only if Level 3 is successful.
 
 ## References
 

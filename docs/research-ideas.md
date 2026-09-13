@@ -39,6 +39,7 @@ Traditional compression minimizes reconstruction error. Task-oriented compressio
 
 - Hypothesis: a compressed weather representation with high reconstruction error can still produce near-optimal routes if it preserves the information the router uses (wind gradients, storm boundaries, thermal gradients). Conversely, a representation with low reconstruction error that shifts a storm boundary can produce a completely different route.
 - Research question: what is the minimum weather representation that preserves routing decisions? Which statistics (mean, variance, quantiles, gradients, extrema) are necessary?
+- Spatial structure matters: mean/median/variance can destroy localized features (a storm cell in an otherwise uniform field). Test spatial structure preservation explicitly: local extrema, directional gradients, boundary locations, connected hazardous regions, low-frequency Fourier/wavelet coefficients. The question is: what spatial features does an isochrone router actually care about?
 - Related work: task-oriented compression is an active ML concept ([information bottleneck](https://en.wikipedia.org/wiki/Information_bottleneck_method), [task-aware lossy compression](https://arxiv.org/abs/2405.04144)) but has not been applied to weather routing. Coordinate-based neural networks have achieved up to 790x compression for weather/climate data ([ICLR 2023](https://arxiv.org/abs/2210.12538)), but optimized for reconstruction, not decisions.
 
 ### Vessel-conditioned weather representation
@@ -53,15 +54,17 @@ The value of a weather feature is conditional on the vessel. 12 kt at 90 TWA is 
 
 The encoder-decoder is trained to minimize routing degradation, but the router remains deterministic isochrone. Simpler, safer, easier to debug. Isolates the compression contribution from the routing contribution. See [Objectives](objectives.md) for the architecture.
 
-## Joint Encoder-Router (Level 4 — target)
+## Joint Encoder-Router (Level 4 — optional extension)
 
 ### Learning to compress and route simultaneously
 
-Train the encoder and router jointly end-to-end. The encoder learns what weather information to keep; the router learns to route from what was kept. They co-adapt.
+Train the encoder and router jointly end-to-end. The encoder learns what weather information to keep; the routing head learns to route from what was kept. They co-adapt.
 
 ```
-weather + vessel state -> encoder -> compact representation (N bytes) -> decoder-router -> ROUTE
+weather + vessel state -> encoder -> compact representation (N bytes) -> routing head -> ROUTE
 ```
+
+Level 4 is optional. If Level 3 achieves 10 KB/day at 95%+ route quality, the project is already successful. Level 4 asks: "Can joint training do even better?"
 
 Why more interesting than separate compression + routing:
 - The encoder doesn't waste capacity preserving weather features the router doesn't need.
@@ -149,13 +152,15 @@ Given the current route, forecast uncertainty, previously downloaded data, and s
 - Scoring: for each candidate, estimate expected routing improvement / bytes. Download the highest-value request.
 - This is an information-theoretic control loop: spend bandwidth where it changes the decision.
 - ML formulation: train a model to estimate V(request) = delta_route_quality / bytes. Training example: (current state, forecast, route, candidate request, actual improvement).
+- Counterfactual evaluation: for each scenario, progressively degrade weather and find the decision boundary — the budget at which the routing decision flips (e.g., go north at 10 KB, go south at 2 KB). This "decision-critical information budget" is more informative than average ETA.
+- Variable-value experiment: remove weather variables one at a time (wind, waves, current, pressure) and measure route quality impact. This produces a per-variable value ranking (e.g., wind = 85% of information value, waves = 10%, current = 5% for open ocean; wind = 45%, current = 45% near a current system). Feeds adaptive variable selection.
 - Related: [Objectives](objectives.md) (Goal 1), [Benchmarking](benchmarking.md)
 
 ## How These Connect
 
 Two architectural paths:
 
-- Path A (stepping stone, Level 3): learned vessel model + task-oriented encoder + isochrone router. ML handles compression, router stays deterministic.
-- Path B (target, Level 4): joint encoder-router (JEPA / IB / world-model inspired) + isochrone safety layer. ML handles compression AND routing, isochrone is fallback.
+- Path A (stepping stone, Levels 3A/3B/3C): learned vessel model + task-oriented encoder + isochrone router. ML handles compression, router stays deterministic.
+- Path B (optional extension, Level 4): joint encoder + routing head (JEPA / IB / world-model inspired) + isochrone safety layer. ML handles compression AND routing, isochrone is fallback.
 
-Both share the same vessel model and adaptive acquisition layer. The four-level experimental design in [Objectives](objectives.md) provides baselines at each layer.
+Both share the same vessel model and adaptive acquisition layer. The experimental design in [Objectives](objectives.md) provides baselines at each layer. Path A is the project; Path B is the bonus.

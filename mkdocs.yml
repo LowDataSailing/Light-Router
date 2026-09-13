@@ -1,5 +1,5 @@
 site_name: Light Router
-site_description: A communication-constrained, vessel-conditioned weather-routing system that learns the minimum meteorological representation required for near-optimal sailing decisions
+site_description: Learning how little weather information a sailing router needs — bandwidth-constrained weather-routing research
 site_author: LowDataSailing
 site_url: https://lowdatasailing.github.io/Light-Router
 

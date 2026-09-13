@@ -270,22 +270,24 @@ References: [Vaswani et al. (2017) — Attention Is All You Need](https://arxiv.
 
 ## 3. Algorithm Comparison
 
-| Algorithm | Accuracy | Speed | Memory | Uncertainty | Multi-Objective | Implementation |
-|-----------|----------|-------|--------|-------------|-----------------|----------------|
-| Isochrone | Medium-High | Medium | Medium | No | No | Easy |
-| Dijkstra | Medium | Fast | Low-Medium | No | No | Easy |
-| A* | High | Very Fast | Medium | No | No | Medium |
-| MCTS | High | Slow | High | Yes | Yes | Hard |
-| MDP | High | Medium-Slow | High | Yes | Yes | Hard |
-| Genetic Algorithm | Medium-High | Slow | Medium | No | Yes | Medium |
-| PSO | Medium-High | Medium | Low | No | Yes | Easy |
-| ACO | Medium-High | Medium-Slow | Medium | No | Yes | Medium |
-| Deep RL | High | Fast (inference) | Very High | Yes | Yes | Very Hard |
-| Imitation Learning | High | Fast | High | Limited | Yes | Hard |
-| Supervised Learning | Medium-High | Fast | Medium | No | Limited | Medium |
-| GNN | High | Medium | Medium | Limited | Yes | Hard |
-| CNN | High | Medium | High | No | Limited | Medium |
-| Transformer | Very High | Slow | Very High | Limited | Limited | Very Hard |
+These ratings reflect general properties from the literature, not empirical results on this specific task. Actual performance must be benchmarked.
+
+| Algorithm | Speed | Memory | Uncertainty | Multi-Objective | Implementation |
+|-----------|-------|--------|-------------|-----------------|----------------|
+| Isochrone | Medium | Medium | No | No | Easy |
+| Dijkstra | Fast | Low-Medium | No | No | Easy |
+| A* | Very Fast | Medium | No | No | Medium |
+| MCTS | Slow | High | Yes | Yes | Hard |
+| MDP | Medium-Slow | High | Yes | Yes | Hard |
+| Genetic Algorithm | Slow | Medium | No | Yes | Medium |
+| PSO | Medium | Low | No | Yes | Easy |
+| ACO | Medium-Slow | Medium | No | Yes | Medium |
+| Deep RL | Fast (inference) | Very High | Yes | Yes | Very Hard |
+| Imitation Learning | Fast | High | Limited | Yes | Hard |
+| Supervised Learning | Fast | Medium | No | Limited | Medium |
+| GNN | Medium | Medium | Limited | Yes | Hard |
+| CNN | Medium | High | No | Limited | Medium |
+| Transformer | Slow | Very High | Limited | Limited | Very Hard |
 
 ## 4. Algorithm Selection Guide
 
@@ -308,11 +310,11 @@ V1 architecture: isochrone planner + adaptive forecast acquisition + uncertainty
 | Vessel-conditioned representation | Transformer (weather + vessel state) | Attention over temporal sequence; learns what weather matters for this boat |
 | Adaptive data requests | Value-per-byte scoring (ML or heuristic) | Information-theoretic control loop: spend bandwidth where it changes the decision |
 
-### 4.3 For Joint Encoder-Router (Level 4 — target)
+### 4.3 For Joint Encoder-Router (Level 4 — optional)
 
 | Requirement | Recommended Approach | Rationale |
 |-------------|----------------------|-----------|
-| Joint compression + routing | Encoder + decoder-router, trained end-to-end | Encoder and router co-adapt; no weather reconstruction needed |
+| Joint compression + routing | Encoder + routing head, trained end-to-end | Encoder and routing head co-adapt; no weather reconstruction needed |
 | Latent-space routing | JEPA-style prediction in embedding space | Predict routing-relevant features, not raw weather |
 | Planning inference | DL router (<60 min) + isochrone refinement (seconds) | Relaxed inference time for planning; isochrone fallback for tactical |
 | Safety fallback | Isochrone refinement + probabilistic safety check | Deterministic safety layer catches DL failures |
