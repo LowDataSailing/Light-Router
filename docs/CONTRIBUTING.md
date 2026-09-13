@@ -10,18 +10,16 @@
 ```bash
 git clone https://github.com/LowDataSailing/Light-Router.git
 cd Light-Router
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+uv sync --all-groups
 ```
 
 ## Code Style
 - Follow PEP 8
-- Use Black for formatting
+- Use Black for formatting (`make format`)
 - Type hints for all function signatures
 - Google-style docstrings
 
 ## Testing
 ```bash
-pytest
+make test
 ```

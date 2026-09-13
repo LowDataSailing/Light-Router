@@ -1,174 +1,78 @@
-# Light Router - Project Description
+# Light Router — Project Description
 
----
+## Overview
 
-## **🎯 Core Objectives**
+Light Router is a communication-constrained, vessel-conditioned weather-routing system that learns the minimum meteorological representation required to make near-optimal sailing decisions.
 
-### **1. Low Data Routing**
-Develop a sailing router that operates with **<10 KB/day** data consumption, making it viable for satellite-constrained environments (Iridium, Starlink).
+## Architecture
 
-**Key Techniques:**
-- Delta encoding (transmit only forecast changes)
-- Region filtering (download only route corridor data)
-- Temporal downsampling (lower resolution for distant forecasts)
-- Predictive caching (pre-fetch likely needed data)
+### Shore / Vessel Split
 
-**Target:** 10-50x reduction compared to best existing filtered tools (Saildocs at ~30 KB/request, PredictWind at ~150 KB/day); 1000x+ reduction vs. raw global GRIB downloads
-
----
-
-### **2. Extreme Event Prediction**
-Build robust prediction models to identify and avoid dangerous weather events during circumnavigation.
-
-**Focus Areas:**
-- Storm detection and avoidance
-- Rogue wave prediction
-- Iceberg and shallow water detection
-- Sudden wind shifts and microbursts
-
-**Target:** 99%+ safety with early warning systems
-
----
-
-## **🌍 Use Cases**
-
-### **Primary**
-- **Circumnavigation 2027** - Real-world validation in extreme conditions
-- **Offshore Racing** - Limited satellite bandwidth scenarios
-- **Long-distance Cruising** - Cost-sensitive data usage
-
-### **Secondary**
-- **Research Vessels** - Remote operations with intermittent connectivity
-- **Autonomous Boats** - Fully automated navigation
-- **Commercial Shipping** - Route optimization with safety constraints
-
----
-
-## **🏗️ Technical Approach**
-
-### **Architecture Overview**
 ```
-┌─────────────────────────────────────────────┐
-│              Light Router                     │
-├─────────────────┬─────────────────┬─────────┤
-│  Data Pipeline   │ Routing Engine  │ AI Layer │
-├─────────────────┼─────────────────┼─────────┤
-│ - Multi-source     │ - Isochrone     │ - Forecast│
-│   Data Pipeline    │   Algorithm     │   Error  │
-│ - Delta Encoding   │ - Hierarchical  │   Modeling│
-│ - Region Filter    │   A*            │ - Extreme│
-│ - Cache            │ - Incremental   │   Event  │
-│                    │   Updates       │   Detection│
-└─────────────────┴─────────────────┴─────────┘
+SHORE: weather models, satellite imagery, ensemble processing, heavy ML
+  |
+  | 2-10 KB/day
+  v
+VESSEL: compact forecast, local cache, routing engine, safety engine, boat polar
 ```
 
-### **Data Pipeline**
-- **Input:** Weather data from multiple sources (NOAA GFS, ECMWF IFS, CMEMS for waves/currents; delivered via Saildocs, NOMADS Grib Filter, or direct HTTP)
-- **Processing:** Delta encoding, route-aware region filtering, temporal downsampling
-- **Output:** Optimized weather data for routing (<10 KB/day)
+Heavy computation happens on shore. The vessel receives compact forecast data and routes autonomously.
 
-### **Routing Engine**
-- **Base Algorithm:** Hierarchical A* for coarse-to-fine optimization
-- **Updates:** Incremental route adjustments as forecasts change
-- **Constraints:** Hard constraints for safety (storms, shallow water, icebergs)
+### Vessel Architecture
 
-### **AI Layer**
-- **Forecast Error Modeling:** Learn and compensate for systematic errors
-- **Extreme Event Detection:** Identify dangerous patterns in weather data
-- **Probabilistic Routing:** Account for forecast uncertainty
+Level 3 (stepping stone): ML handles compression, isochrone handles routing.
 
----
+```
+weather -> ML encoder -> compact forecast -> isochrone solver -> safety/uncertainty -> ROUTE
+```
 
-## **📊 Key Metrics**
+Level 4 (target): ML handles compression AND routing jointly. Isochrone is safety fallback.
 
-| **Category**       | **Metric**               | **Target**          |
-|--------------------|--------------------------|---------------------|
-| **Data**          | Daily consumption        | <10 KB/day          |
-| **Data**          | Per-update consumption   | <5 KB               |
-| **Safety**        | Extreme event detection  | 99%+ accuracy        |
-| **Safety**        | Route reliability        | 99%+ success rate   |
-| **Performance**   | Route quality            | <5% from optimal    |
-| **Performance**   | Inference time           | <1 minute            |
+```
+weather + vessel state -> encoder -> compact representation -> decoder-router -> candidate route
+  -> isochrone refinement + safety check -> final ROUTE
+```
 
----
+The encoder and router are trained jointly end-to-end. The isochrone remains as a deterministic safety fallback. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models. See [Objectives](objectives.md) for the four-level experimental design.
 
-## **🧪 Validation Strategy**
+### Adaptive Information Acquisition
 
-### **Platforms**
-1. **Freewinds.world** - Potential simulation and showcase platform (virtual sailing, route validation)
-2. **OpenCPN** - Open source integration for community testing
-3. **Custom Simulator** - Full control for edge cases
+```
+Route -> What weather matters? -> Request only that information -> Update route -> What changed? -> Request only the information needed
+```
 
-### **Methodology**
-- **Head-to-Head Racing:** Compare against PredictWind, SailGrib, qtVlm
-- **Historical Replay:** Test with past race data (GGR 2022, Vendée Globe 2020)
-- **Synthetic Scenarios:** Gulf Stream crossing, Southern Ocean storms, Cape Horn
-- **Monte Carlo:** 1000+ simulations with perturbed weather data
+Spend bandwidth where it changes the decision.
 
----
+## Use Cases
 
-## **🤝 Potential Collaborations**
+Primary: solo/offshore sailor with unreliable or expensive satellite bandwidth. Also: circumnavigation, offshore racing.
 
-### **Weather Data Sources**
-- **NOAA NOMADS:** Free GFS data with server-side Grib Filter subsetting
-- **ECMWF Open Data:** Free 9 km IFS forecasts since October 2025
-- **Copernicus Marine Service (CMEMS):** Wave and current data
-- **Saildocs:** Email-based GRIB delivery for low-bandwidth scenarios
-- **Infoclimat:** Potential primary data provider — GRIB2, wave models, real-time forecasts (not yet contacted)
+Secondary: autonomous boats (same value-per-byte problem, different regulatory requirements), research vessels (intermittent connectivity).
 
-### **Simulation and Testing**
-- **Freewinds.world:** Potential simulation platform for virtual race testing and route validation (not yet contacted)
+## Validation Strategy
 
-### **Open Source Community**
-- **libweatherrouting:** [https://github.com/dakk/libweatherrouting](https://github.com/dakk/libweatherrouting) — Python routing library
-- **OpenCPN Weather Routing:** [https://opencpn.org/OpenCPN/plugins/weatherroute.html](https://opencpn.org/OpenCPN/plugins/weatherroute.html) — Open source isochrone routing
-- **SIMROUTE:** [https://github.com/ManelGrifoll/SIMROUTE](https://github.com/ManelGrifoll/SIMROUTE) — A* routing with CMEMS data
+- Degradation curve: same route, same weather, progressively constrain data budget from 1 KB to unlimited
+- Head-to-head: same conditions against PredictWind, SailGrib WR, qtVlm, OpenCPN Weather Routing
+- Historical replay: archived race data
+- Synthetic scenarios: Gulf Stream crossing, Southern Ocean storms, Cape Horn, Doldrums
+- Monte Carlo: 1000+ simulations with forecast noise (10%, 20%, 30% error)
 
----
+See [Benchmarking](benchmarking.md) for full methodology.
 
-## **📅 Roadmap**
+## Collaborations
 
-### **Phase 1: Foundation**
-- Set up data access (NOAA NOMADS, ECMWF open data, Saildocs)
-- Implement data pipeline (delta encoding, route-aware region filtering)
-- Develop baseline routing engine
+Weather data: [NOAA NOMADS](https://nomads.ncep.noaa.gov), [ECMWF Open Data](https://data.ecmwf.int) (free since Oct 2025), [Copernicus Marine Service](https://marine.copernicus.eu), [Saildocs](http://www.saildocs.com), [Infoclimat](https://www.infoclimat.fr) (not yet contacted).
 
-### **Phase 2: Core Features**
-- Integrate weather data sources (NOAA, ECMWF, CMEMS)
-- Implement safety constraints
-- Develop extreme event detection
+Simulation: [Freewinds.world](https://freewinds.world) (not yet contacted).
 
-### **Phase 3: Optimization**
-- Optimize for edge deployment (Raspberry Pi)
-- Fine-tune AI models
-- Validate with real-world testing
+Open source: [libweatherrouting](https://github.com/dakk/libweatherrouting), [OpenCPN Weather Routing](https://opencpn.org/OpenCPN/plugins/weatherroute.html), [SIMROUTE](https://github.com/ManelGrifoll/SIMROUTE).
 
-### **Phase 4: Showcase**
-- Deploy on Freewinds.world (if collaboration established)
-- Publish benchmark results
-- Engage sailing community
+## Documentation
 
----
-
-## **📚 Additional Documentation**
-- [Objectives](objectives.md)
-- [Literature Review](literature-review.md)
-- [Meteorological Information Transfer](meteorological-info-transfer.md)
-- [Routing Algorithms](routing-algorithms.md)
-- [Benchmarking Methodology](benchmarking.md)
-- [Market Positioning](market-positioning.md)
-
----
-
-## **🔗 Related Resources**
-- [NOAA NOMADS](https://nomads.ncep.noaa.gov) — Free weather data
-- [ECMWF Open Data](https://data.ecmwf.int) — Free since October 2025
-- [Copernicus Marine Service](https://marine.copernicus.eu) — Wave and current data
-- [Saildocs](http://www.saildocs.com) — Email-based GRIB service
-- [Infoclimat](https://www.infoclimat.fr) — Potential data provider
-- [Freewinds.world](https://freewinds.world) — Potential simulation platform
-- [Golden Globe Race 2026](https://goldengloberace.com) — Starts September 6, 2026
-
----
-
-**© 2026 LowDataSailing**
+- [Objectives](objectives.md) — goals, experimental design, metrics, roadmap
+- [Research Ideas](research-ideas.md) — hypotheses, JEPA/IB/World Models connections
+- [Literature Review](literature-review.md) — competitor analysis
+- [Meteorological Information Transfer](meteorological-info-transfer.md) — data sources, formats, protocols
+- [Routing Algorithms](routing-algorithms.md) — algorithm survey and selection guide
+- [Benchmarking](benchmarking.md) — test methodology
+- [Market Positioning](market-positioning.md) — market analysis
