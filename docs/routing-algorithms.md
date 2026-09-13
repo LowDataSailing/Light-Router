@@ -483,29 +483,31 @@ The isochrone method is a time-stepped dynamic programming approach. For each ti
 
 ## **🎯 4. Algorithm Selection Guide**
 
-### **4.1 For Low Data Routing**
+### **4.1 For Low Data Routing (v1)**
 | **Requirement** | **Recommended Algorithm** | **Rationale** |
 |---------------|---------------------------|--------------|
-| Fast inference | A*, Isochrone | Low computational cost |
-| Low memory | Dijkstra, A* | Minimal memory footprint |
-| Edge deployment | A*, Isochrone | Raspberry Pi compatible |
-| Data efficiency | Any (with compression) | Algorithm choice less important than data handling |
+| V1 routing engine | **Isochrone** | Standard sailing algorithm; naturally handles polar diagrams and time-dependent weather |
+| Fast inference | Isochrone | Low computational cost; runs on Raspberry Pi |
+| Low memory | Isochrone | Minimal memory footprint with pruning |
+| Edge deployment | Isochrone | Raspberry Pi compatible; <500 MB RAM, <1 minute |
 
-### **4.2 For Extreme Event Prediction**
-| **Requirement** | **Recommended Algorithm** | **Rationale** |
-|---------------|---------------------------|--------------|
-| Storm detection | Supervised Learning, CNN | Good for pattern recognition in weather data |
-| Rogue wave prediction | MCTS, MDP | Handles uncertainty well |
-| Iceberg detection | CNN, Supervised Learning | Good for image/satellite data |
-| Microburst detection | Supervised Learning, CNN | Good for high-resolution wind data |
+**V1 architecture:** Isochrone planner + adaptive forecast acquisition + uncertainty-aware cost function. Do not replace the routing engine with an AI algorithm. The neural network serves the router (compression, vessel model, data-request policy), it does not replace it.
 
-### **4.3 For Route Optimization**
-| **Requirement** | **Recommended Algorithm** | **Rationale** |
+### **4.2 For Learned Compression (v2+)**
+| **Requirement** | **Recommended Approach** | **Rationale** |
 |---------------|---------------------------|--------------|
-| Single objective | Dijkstra, A*, Isochrone | Simple and effective |
-| Multi-objective | MCTS, MDP, Genetic Algorithm | Can balance multiple objectives |
-| Uncertainty | MCTS, MDP, Deep RL | Handles uncertainty explicitly |
-| Real-time | A*, Isochrone, Imitation Learning | Fast inference |
+| Task-oriented weather compression | Neural encoder-decoder | Train to minimize routing degradation, not reconstruction error |
+| Vessel-conditioned representation | Transformer (weather + vessel state) | Attention over temporal sequence; learns what weather matters for this boat |
+| Adaptive data requests | Value-per-byte scoring (ML or heuristic) | Information-theoretic control loop: spend bandwidth where it changes the decision |
+
+### **4.3 For Safety (v1)**
+| **Requirement** | **Recommended Approach** | **Rationale** |
+|---------------|---------------------------|--------------|
+| Storm/ Gale identification | Threshold-based + forecast disagreement | Conventional meteorological thresholds are well-validated |
+| Extreme wind/wave exposure | Probabilistic (P(Wind > threshold | forecast)) | Minimize probability of exposure, not undefined "99% safety" |
+| Rapidly deteriorating conditions | Temporal derivative of forecast fields | Detect acceleration in wind/wave trends |
+
+**Deferred to future modules:** rogue-wave prediction, iceberg detection (requires satellite imagery — shore-side), microburst prediction (requires high-res wind data). See [Objectives](objectives.md).
 
 ---
 
@@ -541,25 +543,25 @@ The isochrone method is a time-stepped dynamic programming approach. For each ti
 ### **6.1 Data Efficiency Metrics**
 | **Metric** | **Definition** | **Target** | **Measurement** |
 |-----------|---------------|------------|----------------|
-| Daily Data Usage | Total bytes downloaded per day | <10 KB | Monitor all downloads |
-| Per-Update Usage | Bytes per forecast update | <5 KB | Measure each fetch |
-| Compression Ratio | Original size vs. compressed size | >10:1 | Compare sizes |
-| Cache Hit Rate | % of data served from cache | >90% | Track cache hits |
+| Degradation curve | Route quality vs. daily data budget (1 KB to unlimited) | Characterized | Route quality at each budget level |
+| Daily Data Usage | Total bytes downloaded per day | <10 KB/day (target operating point) | Monitor all downloads |
+| Per-Update Usage | Bytes per forecast update | Report at each budget level | Measure each fetch |
 
-### **6.2 Route Quality Metrics**
+### **6.2 Route Quality Metrics (reported separately)**
 | **Metric** | **Definition** | **Target** | **Measurement** |
 |-----------|---------------|------------|----------------|
-| Time to Destination | Total voyage time | <5% from optimal | Compare with great circle + currents |
-| Distance Sailed | Actual path length | <10% from optimal | Compare with great circle |
-| Safety Score | Avoidance of hazards | >95% | Penalize routes through storms, shallow water |
-| Reliability | Route success rate | >99% | % of routes completed without issues |
+| ETA difference | (ETA_compressed - ETA_full) / ETA_full | Report at each budget level | Compare to full-information reference route |
+| Distance difference | (dist_compressed - dist_full) / dist_full | Report at each budget level | Compare routes |
+| Max wind exposure | Difference in maximum wind encountered | Report | Compare routes |
+| Decision divergence | Did the compressed system choose the same tactical decision? | Report | Compare route topology |
+| Geographic route divergence | Distance between the two trajectories | Report | Compare paths |
 
-### **6.3 Extreme Event Prediction Metrics**
+### **6.3 Safety Metrics (probabilistic)**
 | **Metric** | **Definition** | **Target** | **Measurement** |
 |-----------|---------------|------------|----------------|
-| Detection Accuracy | % of events correctly identified | >90% | Compare predictions vs. actual |
-| False Positive Rate | % of false alarms | <5% | Track false predictions |
-| Lead Time | Time before event detection | Maximize | Measure from detection to event |
+| P(Wind > threshold) | Probability of exceeding wind threshold given forecast | Minimize | Ensemble-based estimation |
+| P(H_s > threshold) | Probability of exceeding wave height threshold | Minimize | Ensemble-based estimation |
+| Forecast disagreement | Spread across ensemble members along route | Report | Ensemble statistics |
 
 ### **6.4 Computational Efficiency Metrics**
 | **Metric** | **Definition** | **Target** | **Measurement** |
@@ -568,6 +570,7 @@ The isochrone method is a time-stepped dynamic programming approach. For each ti
 | Memory Usage | RAM consumed | <500 MB | Monitor RAM |
 | CPU Usage | CPU load | <50% | Monitor CPU |
 | Battery Impact | Energy consumed | <1 Wh | Measure power draw |
+| Offline operation | Route with no cloud dependency after receiving weather data | Required | Cold-start test |
 
 ---
 
@@ -610,31 +613,32 @@ The isochrone method is a time-stepped dynamic programming approach. For each ti
 | **Opportunity** | **Current State** | **Potential Improvement** | **Feasibility** | **Challenge** |
 |---------------|------------------|--------------------------|-----------------|---------------|
 | Region Filtering | Already exists (Saildocs, NOMADS Grib Filter, SailGrib WR) | Route-aware dynamic selection | High | Dynamic corridor prediction |
-| Variable Filtering | Already exists (Saildocs, PredictWind) | AI-driven variable selection | High | Determining needed variables |
+| Variable Filtering | Already exists (Saildocs, PredictWind) | Vessel-conditioned variable selection | High | Determining needed variables per boat |
 | Temporal Downsampling | Partial (some tools) | Adaptive resolution based on forecast horizon | High | Accuracy tradeoff |
-| Delta Encoding | Not used in sailing tools | 70-90% reduction for sequential updates | Medium | Stateful connection over satellite |
+| Delta Encoding | Not used in sailing tools | 70-90% reduction for sequential updates | **Medium** | Stateful connection over SBD; message loss makes delta useless without base. Needs application-layer reliability. |
 | Custom Binary Encoding | Not used | 60-80% on top of GRIB compression | Medium | Encoding design, compatibility |
+| Task-Oriented Compression | Not used (novel) | Compress to preserve routing decision, not weather | Medium | Requires training data and ML pipeline |
 | Ensemble Summary Compression | Not used | Download mean/spread instead of all members | Medium | Loss of tail information |
-| **Combined** | N/A | **90-99% reduction vs. full global** | High | Integration complexity |
+| **Combined** | N/A | **90-99% reduction vs. full global** | **Medium** | Techniques interact; empirical curve needed, not naive multiplication |
 
 > **Note:** The baseline for comparison matters. Full global GRIB downloads are 500-800 MB. Tools like Saildocs and PredictWind already achieve 100-500 KB/day through region and variable filtering. The project's <10 KB/day target is a 10-50x improvement over the best existing filtered tools, not a 1000x improvement over raw global downloads.
 
 ### **8.2 Algorithm Improvements**
 | **Opportunity** | **Current State** | **Potential Improvement** | **Feasibility** | **Challenge** |
 |---------------|------------------|--------------------------|-----------------|---------------|
-| AI-Powered Routing | Not used | Better performance | Medium | Training data, validation |
-| Uncertainty Handling | Limited | Better safety | High | Computational cost |
-| Multi-Objective Optimization | Limited | Better balance | High | Complexity |
-| Edge Optimization | Partial | Raspberry Pi compatible | High | Memory/CPU limits |
-| Real-Time Capability | Partial | <1 minute inference | High | Algorithm efficiency |
+| Isochrone (v1) | Standard in production tools | Add uncertainty-aware cost function | High | Multi-objective cost design |
+| Adaptive data acquisition | Not used | Value-per-byte request policy | High | Scoring function design |
+| Learned vessel performance | Exists commercially (PredictWind AI Polars) | Personalized polar from on-water observations | Medium | Data collection, online learning |
+| Vessel-conditioned compression | Not used (novel) | Compress weather based on what matters for this boat | Medium | Training data, model design |
 
-### **8.3 Extreme Event Prediction Improvements**
+### **8.3 Safety Improvements (v1 scope)**
 | **Opportunity** | **Current State** | **Potential Improvement** | **Feasibility** | **Challenge** |
 |---------------|------------------|--------------------------|-----------------|---------------|
-| Rogue Wave Detection | Not available | First capability | Medium | Data availability, validation |
-| Microburst Detection | Not available | First capability | Medium | Data resolution, lead time |
-| Iceberg Detection | Limited (StormGeo) | Wider availability | High | Data access, cost |
-| Storm Detection | Basic | Improved accuracy | High | Data quality |
+| Storm detection | Basic threshold-based | Threshold + forecast disagreement | High | Data quality |
+| Extreme wind/wave exposure | Basic | Probabilistic P(threshold | forecast) | High | Ensemble data access |
+| Rapidly deteriorating conditions | Not widely used | Temporal derivative monitoring | High | Forecast resolution |
+
+**Deferred (future modules):** rogue wave prediction, iceberg detection (shore-side satellite imagery), microburst prediction (high-res wind data). See [Objectives](objectives.md).
 
 ---
 

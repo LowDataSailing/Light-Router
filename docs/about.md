@@ -12,6 +12,6 @@ Democratize advanced sailing navigation through AI-powered, ultra-low-data solut
 - Lilian Bosc: Founder, Lead Developer
 
 ## Contact
-- Email: contact@lowdatasailing.org
+- Email: contactlilian3@gmail.com
 - GitHub: [LowDataSailing](https://github.com/LowDataSailing)
 - Repository: [Light-Router](https://github.com/LowDataSailing/Light-Router)

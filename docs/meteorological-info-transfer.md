@@ -181,11 +181,12 @@
 - **Website:** [https://www.iridium.com](https://www.iridium.com)
 - **Developer Portal:** [https://developer.iridium.com](https://developer.iridium.com)
 - **Protocols:**
-  - **SBD (Short Burst Data):** 340 bytes max per message
+  - **SBD (Short Burst Data):** up to 1960 bytes (MO) / 1890 bytes (MT) per message
     - **Documentation:** [https://developer.iridium.com/iridium-developer-portal/technical-resources/sbd/](https://developer.iridium.com/iridium-developer-portal/technical-resources/sbd/)
     - **Speed:** 2.4 KB/s (burst), 1.2 KB/s (sustained)
     - **Latency:** 1-2 seconds
     - **Cost:** $0.50-5.00/MB
+    - **Note:** SBD is a message-based protocol, not a session. Messages are acknowledged but there is no guaranteed ordering or session state. Application-layer reliability (sequence numbers, checksums, retransmission) is required for any multi-message data transfer.
   - **RUDICS (Router-Based Unrestricted Digital Internetworking Connectivity Solution):**
     - **Documentation:** [https://developer.iridium.com/iridium-developer-portal/technical-resources/rudics/](https://developer.iridium.com/iridium-developer-portal/technical-resources/rudics/)
     - **Speed:** 2.4-100+ KB/s (depends on plan)
@@ -300,9 +301,10 @@ These services are the primary method used by offshore sailors for low-bandwidth
   - Reconstruct on client
 - **Savings:** 70-90% for sequential forecasts
 - **Challenges:**
-  - Requires stateful connection
+  - Requires stateful connection (both sides must maintain the previous forecast state)
   - First transmission still large
   - Complex reconstruction logic
+  - **Critical for this project:** Iridium SBD is a message-based protocol, not a session. If a delta message is lost, the delta is useless without the base. This requires an application-layer reliability mechanism (sequence numbers, checksums, retransmission, fallback to full snapshot). Without this, delta encoding over SBD has Medium feasibility, not High. The 70-90% savings figure assumes reliable delivery, which SBD does not guarantee natively.
 
 #### **Region Filtering**
 - **Concept:** Download only data for the area of interest
@@ -382,13 +384,13 @@ Sizes below are per single forecast time step unless otherwise noted. "Full" mea
 ### **6.1 For Satellite Transfer (Iridium)**
 | **Technique** | **Potential Savings** | **Feasibility** | **Implementation Complexity** |
 |--------------|----------------------|-----------------|-------------------------------|
-| Delta Encoding | 70-90% | High | Medium |
+| Delta Encoding | 70-90% | Medium | Medium | Not used in sailing tools |
 | Region Filtering | 80-95% | High | Low |
 | Temporal Downsampling | 50-80% | High | Medium |
 | Variable Filtering | 50-80% | High | Low |
 | Custom Binary Encoding | 60-80% | Medium | High |
 | GRIB2 Compression | 20-30% | High | Low (built-in) |
-| **Combined** | **90-99%** | High | Medium |
+| **Combined** | **90-99%** | Medium | Medium | Savings cannot be multiplied naively; techniques interact. An empirical degradation curve is needed. |
 
 ### **6.2 For Starlink/High-Bandwidth**
 | **Technique** | **Potential Savings** | **Feasibility** |
