@@ -26,14 +26,14 @@ Level 3 (stepping stone): ML handles compression, isochrone handles routing.
 weather -> ML encoder -> compact forecast -> isochrone solver -> safety/uncertainty -> ROUTE
 ```
 
-Level 4 (target): ML handles compression AND routing jointly. Isochrone is safety fallback.
+Level 4 (optional extension): ML handles compression AND routing jointly. Isochrone is safety fallback.
 
 ```
-weather + vessel state -> encoder -> compact representation -> decoder-router -> candidate route
+weather + vessel state -> encoder -> compact representation -> routing head -> candidate route
   -> isochrone refinement + safety check -> final ROUTE
 ```
 
-The encoder and router are trained jointly end-to-end. The isochrone remains as a deterministic safety fallback. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models. See [Objectives](objectives.md) for the four-level experimental design.
+The encoder and routing head are trained jointly end-to-end. The isochrone remains as a deterministic safety fallback. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models. See [Objectives](objectives.md) for the experimental design.
 
 ### Adaptive Information Acquisition
 

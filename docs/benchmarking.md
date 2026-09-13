@@ -17,9 +17,14 @@ Metrics at each level (report separately, do not combine):
 - Max wave exposure: difference in maximum wave height encountered
 - Unsafe-hours exposure: difference in time in unsafe conditions
 - Decision divergence: did the compressed system choose the same tactical decision?
+- Decision boundary: at what budget does the routing decision flip? (e.g., go north at 10 KB, go south at 2 KB)
 - Geographic route divergence: distance between the two trajectories
 
-The four-level experimental design (classical, compressed, learned compression, joint encoder-router) is defined in [Objectives](objectives.md). All comparisons are relative to Level 1 (full-information reference route).
+### Variable-Value Experiment
+
+Remove weather variables one at a time (wind, waves, current, pressure) and measure route quality impact. This produces a per-variable value ranking that feeds adaptive variable selection. Example result: wind = 85% of information value for open ocean, current = 45% near the Gulf Stream.
+
+The experimental design (Levels 1, 2, 3A, 3B, 3C, 4) is defined in [Objectives](objectives.md). All comparisons are relative to Level 1 (full-information reference route).
 
 ## Test Methods
 
