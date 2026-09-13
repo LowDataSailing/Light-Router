@@ -493,14 +493,24 @@ The isochrone method is a time-stepped dynamic programming approach. For each ti
 
 **V1 architecture:** Isochrone planner + adaptive forecast acquisition + uncertainty-aware cost function. Do not replace the routing engine with an AI algorithm. The neural network serves the router (compression, vessel model, data-request policy), it does not replace it.
 
-### **4.2 For Learned Compression (v2+)**
+### **4.2 For Learned Compression (Level 3)**
 | **Requirement** | **Recommended Approach** | **Rationale** |
 |---------------|---------------------------|--------------|
 | Task-oriented weather compression | Neural encoder-decoder | Train to minimize routing degradation, not reconstruction error |
 | Vessel-conditioned representation | Transformer (weather + vessel state) | Attention over temporal sequence; learns what weather matters for this boat |
 | Adaptive data requests | Value-per-byte scoring (ML or heuristic) | Information-theoretic control loop: spend bandwidth where it changes the decision |
 
-### **4.3 For Safety (v1)**
+### **4.3 For Joint Encoder-Router (Level 4 — target)**
+| **Requirement** | **Recommended Approach** | **Rationale** |
+|---------------|---------------------------|--------------|
+| Joint compression + routing | Encoder + decoder-router, trained end-to-end | Encoder and router co-adapt; no weather reconstruction needed |
+| Latent-space routing | JEPA-style prediction in embedding space | Predict routing-relevant features, not raw weather; avoids wasting capacity on unpredictable details |
+| Planning inference | DL router (<60 min) + isochrone refinement (seconds) | Relaxed inference time for planning; isochrone fallback for tactical |
+| Safety fallback | Isochrone refinement + probabilistic safety check | Deterministic safety layer catches DL failures |
+
+See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
+
+### **4.4 For Safety (v1)**
 | **Requirement** | **Recommended Approach** | **Rationale** |
 |---------------|---------------------------|--------------|
 | Storm/ Gale identification | Threshold-based + forecast disagreement | Conventional meteorological thresholds are well-validated |

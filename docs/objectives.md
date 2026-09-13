@@ -165,6 +165,34 @@ L = alpha * weather_reconstruction_error + beta * routing_performance_degradatio
 
 where beta should dominate.
 
+#### Joint encoder-router (target architecture)
+
+Instead of decoding weather and feeding it to a classical router, train the encoder and router jointly end-to-end. The router learns to operate directly in the compressed representation space. See [Research Ideas](research-ideas.md) for the full architecture, connections to JEPA, Information Bottleneck, and World Models.
+
+```
+weather + vessel state
+       |
+       v
+   encoder (what to keep / how to compress)
+       |
+       v
+   compact representation (N bytes)
+       |
+       v
+   decoder-router (route directly from compact representation)
+       |
+       v
+   candidate ROUTE
+       |
+       v
+   isochrone refinement + safety check
+       |
+       v
+   final ROUTE
+```
+
+The isochrone remains as a safety fallback: it refines the DL candidate route and catches failures. The DL router can take 30-60 minutes (planning); the isochrone refinement is seconds (tactical).
+
 ### Ground Truth
 
 Use full-resolution weather + best available conventional router (isochrone with full GRIB) as the **full-information reference route**. Not "ground truth" — the forecast itself is uncertain and the polar is imperfect. This is an oracle under the chosen weather forecast, polar model, and routing algorithm.
@@ -247,7 +275,7 @@ Route to minimize expected exposure to hazardous conditions, weighted by severit
 
 ---
 
-## Three-Level Experimental Design
+## Four-Level Experimental Design
 
 Every goal above fits into a layered experimental design where each layer has a baseline:
 
@@ -267,15 +295,13 @@ Compressed GRIB (statistical aggregation) + static polar + isochrone router
 
 Measure how much compression is possible without route degradation.
 
-### Level 3: Learned (with ML)
+### Level 3: Learned compression (ML, separate from router)
 
 ```
-Compressed weather (neural encoder) + learned vessel model + isochrone router
+Compressed weather (neural encoder-decoder) + learned vessel model + isochrone router
 ```
 
-Measure whether the learned system can recover performance that conventional compression loses.
-
-The neural network serves the router, it does not replace it:
+The neural network serves the router (compression + vessel model), it does not replace it. Measure whether the learned compression recovers performance that conventional compression loses.
 
 ```
               WEATHER
@@ -296,7 +322,29 @@ The neural network serves the router, it does not replace it:
               ROUTE
 ```
 
-This gives interpretability + deterministic routing + ML compression. Much safer than a black-box routing model.
+This gives interpretability + deterministic routing + ML compression. It is the stepping stone — safer and easier to debug.
+
+### Level 4: Joint encoder-router (ML handles compression AND routing)
+
+```
+Compressed weather (neural encoder) + learned vessel model
+       |
+       v
+   decoder-router (routes directly from compressed representation)
+       |
+       v
+   candidate route
+       |
+       v
+   isochrone refinement + safety check
+       |
+       v
+   final ROUTE
+```
+
+The encoder and router are trained jointly end-to-end. The router learns to operate in the compressed representation space. The isochrone remains as a safety fallback — it refines the DL candidate and catches failures. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
+
+This is the target architecture. It is riskier (black-box router) but potentially more powerful (encoder and router co-adapt). The hybrid safety layer mitigates the risk.
 
 ---
 
@@ -333,8 +381,10 @@ This gives interpretability + deterministic routing + ML compression. Much safer
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Inference time | <1 minute | Wall-clock |
+| Planning inference time | <60 min (relaxed — planning decision, not real-time) | Wall-clock |
+| Tactical inference time | <1 min (isochrone fallback) | Wall-clock |
 | Memory usage | <500 MB | RAM monitoring |
+| Energy per route | Report (Wh per calculation) | Power draw x inference time |
 | Offline operation | Route with no cloud dependency after receiving weather data | Cold-start test |
 
 ---
@@ -353,9 +403,13 @@ Create: full weather -> compression/query layer -> 1 KB / 2 KB / 5 KB / 10 KB / 
 
 Add: current route -> forecast uncertainty -> candidate weather requests -> value-per-byte scoring -> best request. This is the actual Light Router research contribution.
 
-### Month 4+: Learned Compression and Vessel Models
+### Month 4: Learned Compression and Vessel Models
 
-Only after the baseline and degradation curve exist: train neural encoders for task-oriented compression, learn vessel-performance corrections, experiment with vessel-conditioned weather representation.
+Train neural encoders for task-oriented compression (Level 3). Learn vessel-performance corrections. Experiment with vessel-conditioned weather representation.
+
+### Month 5+: Joint Encoder-Router
+
+Train the encoder and router jointly end-to-end (Level 4). Experiment with JEPA-style prediction in embedding space. Add the isochrone safety layer. Compare against Level 3 to measure whether joint training beats separate compression + routing.
 
 ---
 

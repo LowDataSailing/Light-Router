@@ -43,6 +43,10 @@ Heavy computation (ensemble processing, satellite image analysis, model training
 
 ### Vessel Architecture
 
+Two paths, from stepping stone to target:
+
+**Level 3 (stepping stone):** ML handles compression, isochrone handles routing.
+
 ```
               WEATHER
                  |
@@ -65,7 +69,31 @@ Heavy computation (ensemble processing, satellite image analysis, model training
               ROUTE
 ```
 
-The neural network serves the router, it does not replace it. This gives interpretability + deterministic routing + ML compression.
+**Level 4 (target):** ML handles compression AND routing jointly. Isochrone is safety fallback.
+
+```
+WEATHER + vessel state
+       |
+       v
+   encoder (what to keep / how to compress)
+       |
+       v
+   compact representation (N bytes)
+       |
+       v
+   decoder-router (route from compressed representation)
+       |
+       v
+   candidate route
+       |
+       v
+   isochrone refinement + safety check
+       |
+       v
+   final ROUTE
+```
+
+The encoder and router are trained jointly end-to-end. The router learns to operate directly in the compressed representation space. The isochrone remains as a deterministic safety fallback: it refines the DL candidate and catches failures. See [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models.
 
 ### Feedback Loop
 
@@ -82,7 +110,7 @@ This is the adaptive information acquisition loop — the core research contribu
 
 ---
 
-## Three-Level Experimental Design
+## Four-Level Experimental Design
 
 ### Level 1: Classical (full information)
 
@@ -100,13 +128,24 @@ Compressed GRIB (statistical aggregation) + static polar + isochrone router
 
 Measure how much compression is possible without route degradation.
 
-### Level 3: Learned (with ML)
+### Level 3: Learned compression (ML separate from router)
 
 ```
-Compressed weather (neural encoder) + learned vessel model + isochrone router
+Compressed weather (neural encoder-decoder) + learned vessel model + isochrone router
 ```
 
-Measure whether the learned system can recover performance that conventional compression loses.
+The neural network serves the router (compression + vessel model). Stepping stone — safer, isolates the compression contribution.
+
+### Level 4: Joint encoder-router (target)
+
+```
+Compressed weather (neural encoder) + learned vessel model
+  -> decoder-router (routes from compressed representation)
+  -> isochrone refinement + safety check
+  -> final ROUTE
+```
+
+The encoder and router are trained jointly end-to-end. The router learns to operate in the compressed representation space. The isochrone is the safety fallback. See [Research Ideas](research-ideas.md).
 
 ---
 
@@ -120,7 +159,7 @@ The target is 10-50x reduction compared to best existing filtered tools (Saildoc
 
 ### 2. Task-Oriented Weather Compression
 
-Compress weather only enough to preserve the routing decision. Statistical compression (mean/median/variance per grid cell) first, then learned compression (neural encoder-decoder trained to minimize routing performance degradation, not weather reconstruction error).
+Compress weather only enough to preserve the routing decision. Statistical compression (mean/median/variance per grid cell) first, then learned compression (neural encoder-decoder trained to minimize routing performance degradation, not weather reconstruction error). The target architecture goes further: train the encoder and router jointly end-to-end, so the router learns to operate directly in the compressed representation space (see [Research Ideas](research-ideas.md) for connections to JEPA, Information Bottleneck, and World Models).
 
 ### 3. Learned Vessel Performance
 

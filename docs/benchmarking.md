@@ -22,15 +22,16 @@ Report separately (do not combine into a single "route quality" number):
 - **Decision divergence:** did the compressed system choose the same tactical decision? (e.g., go north vs. go south)
 - **Geographic route divergence:** distance between the two trajectories
 
-### Three-Level Experimental Design
+### Four-Level Experimental Design
 
 | Level | Weather | Vessel Model | Router | Purpose |
 |-------|---------|-------------|-------|---------|
 | 1. Classical | Full GRIB | Static polar | Isochrone | Full-information reference route (oracle) |
 | 2. Compressed | Statistical aggregation | Static polar | Isochrone | Measure compression-only degradation |
-| 3. Learned | Neural encoder | Learned polar | Isochrone | Measure whether ML recovers lost performance |
+| 3. Learned compression | Neural encoder-decoder | Learned polar | Isochrone | Measure whether ML compression recovers lost performance |
+| 4. Joint encoder-router | Neural encoder | Learned polar | DL router + isochrone fallback | Measure whether joint training beats separate compression + routing |
 
-All comparisons are relative to Level 1 (the full-information reference route, not "ground truth").
+All comparisons are relative to Level 1 (the full-information reference route, not "ground truth"). Level 4 is the target architecture — the DL router handles big-picture routing from compressed data, the isochrone refines and provides a safety fallback.
 
 ## Dimensions
 
@@ -70,5 +71,6 @@ Test on Raspberry Pi: inference time, memory usage, battery impact, offline oper
 ### Computational Efficiency
 - Hardware tests: Raspberry Pi 4/5, Jetson Nano
 - Algorithm complexity: scale with waypoints, forecast length, resolution
-- Battery tests: measure Wh per update
+- Energy: measure Wh per route calculation (power draw x inference time)
+- Inference time: planning (<60 min acceptable) vs. tactical (<1 min, isochrone fallback)
 - Offline test: cold start, no cloud dependency, route from cached data only
