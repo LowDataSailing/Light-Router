@@ -72,18 +72,15 @@ def _merge(grids: list[WeatherGrid]) -> WeatherGrid:
                 "GRIB files have mismatched spatial grids; "
                 "download them with the same subregion"
             )
-    times = np.concatenate([g.times for g in grids])
-    order = np.argsort(times)
-    times = times[order]
-    if np.any(np.diff(times) <= 0):
-        # keep first occurrence of duplicated steps
-        _, first = np.unique(times, return_index=True)
-        keep = np.sort(first)
-        times = times[keep]
-    else:
-        keep = order
-    data = {
-        name: np.concatenate([g.data[name] for g in grids])[keep]
-        for name in base.variables
+    times_all = np.concatenate([g.times for g in grids])
+    data_all = {
+        name: np.concatenate([g.data[name] for g in grids]) for name in base.variables
     }
+    # sort times AND data together, then keep the first of each duplicated step
+    order = np.argsort(times_all, kind="stable")
+    times = times_all[order]
+    unique_mask = np.ones(times.shape, dtype=bool)
+    unique_mask[1:] = times[1:] != times[:-1]
+    times = times[unique_mask]
+    data = {name: data_all[name][order][unique_mask] for name in base.variables}
     return WeatherGrid(times=times, lats=base.lats, lons=base.lons, data=data)

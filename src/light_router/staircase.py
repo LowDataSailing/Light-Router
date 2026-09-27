@@ -99,6 +99,24 @@ def _run_level(
     )
 
 
+def format_summary(rows: list[StaircaseRow]) -> str:
+    """Human-readable staircase table (the console summary)."""
+    lines = [
+        f"{'budget':>10} {'bytes':>9} {'s/t/b':>10} {'ETA diff':>9} "
+        f"{'dist diff':>9} {'VMG diff':>8} {'decision':>8} {'geo div':>8}"
+    ]
+    for row in rows:
+        m = row.metrics
+        eta = f"{m.eta_diff_pct:+.1f}%" if m.reached else "n/a"
+        lines.append(
+            f"{row.budget:>10} {row.package_bytes:>9} "
+            f"{row.spatial_stride}/{row.temporal_stride}/{row.bits:>2}   "
+            f"{eta:>9} {m.distance_diff_pct:+7.1f}% {m.vmg_diff_kt:+7.2f} "
+            f"{str(m.decision_divergence):>8} {m.geographic_divergence_nm:7.1f}nm"
+        )
+    return "\n".join(lines)
+
+
 def write_csv(rows: list[StaircaseRow], path: Path) -> None:
     """Write the degradation curve as CSV."""
     path.parent.mkdir(parents=True, exist_ok=True)

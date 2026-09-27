@@ -28,7 +28,12 @@ class DegradeConfig:
     keep_variables: tuple[str, ...] = WIND_VARIABLES
 
     def fidelity_score(self) -> tuple[float, ...]:
-        """Higher is better: prefer small strides and many bits."""
+        """Higher is better: prefer small strides and many bits.
+
+        Lexicographic priority — spatial resolution first (routing decisions
+        are local), then temporal resolution, then bits. A deliberate total
+        order over "highest-fidelity", documented in the spec (§5).
+        """
         return (1.0 / self.spatial_stride, 1.0 / self.temporal_stride, self.bits / 32.0)
 
 
@@ -44,64 +49,78 @@ def degrade(grid: WeatherGrid, config: DegradeConfig) -> WeatherGrid:
     lons = grid.lons[:: config.spatial_stride]
     if len(times) < 1 or len(lats) < 2 or len(lons) < 2:
         raise ValueError("degradation leaves an unusable grid; reduce the strides")
+    data = {
+        name: _quantize(sub, config.bits) for name, sub in _sliced(grid, config).items()
+    }
+    return WeatherGrid(times=times, lats=lats, lons=lons, data=data)
+
+
+def _sliced(grid: WeatherGrid, config: DegradeConfig) -> dict[str, np.ndarray]:
+    """Stride-subsampled arrays for the variables kept by the config."""
     data = {}
     for name in config.keep_variables:
         if name not in grid.data:
             continue
         arr = grid.data[name]
-        sub = arr[
+        data[name] = arr[
             :: config.temporal_stride,
             :: config.spatial_stride,
             :: config.spatial_stride,
         ]
-        data[name] = _quantize(sub, config.bits)
-    return WeatherGrid(times=times, lats=lats, lons=lons, data=data)
+    return data
+
+
+def _codes(sub: np.ndarray, bits: int) -> tuple[np.ndarray, float, float]:
+    """Uniform quantization of `sub` to `bits` bits.
+
+    Returns (integer codes in 0..2^bits-1, vmin, vmax); vmin/vmax are the
+    scales the receiver needs to dequantize.
+    """
+    vmin, vmax = float(np.min(sub)), float(np.max(sub))
+    if vmax <= vmin:
+        return np.zeros(sub.shape, dtype=np.uint64), vmin, vmax
+    levels = 2**bits - 1
+    codes = np.round((sub - vmin) / (vmax - vmin) * levels).astype(np.uint64)
+    return codes, vmin, vmax
 
 
 def _quantize(arr: np.ndarray, bits: int) -> np.ndarray:
-    """Uniform quantization to `bits` bits per value, returned as float32
-    (dequantized), which is what the router consumes."""
+    """Quantize to `bits` bits per value and dequantize back to float32,
+    which is what the router consumes."""
     if bits >= 32:
         return arr.astype(np.float32)
+    codes, vmin, vmax = _codes(arr, bits)
     levels = 2**bits - 1
-    vmin = float(np.min(arr))
-    vmax = float(np.max(arr))
-    if vmax <= vmin:
-        return np.full_like(arr, vmin, dtype=np.float32)
-    scaled = np.round((arr - vmin) / (vmax - vmin) * levels)
-    return (scaled / levels * (vmax - vmin) + vmin).astype(np.float32)
+    return (codes / levels * (vmax - vmin) + vmin).astype(np.float32)
+
+
+def _pack_codes(codes: np.ndarray, bits: int) -> bytes:
+    """Pack integer codes at `bits` bits per value (LSB-first, zero-padded
+    to a byte boundary) — the payload that would actually be transmitted."""
+    flat = codes.ravel().astype(np.uint64)
+    bits_matrix = ((flat[:, None] >> np.arange(bits, dtype=np.uint64)) & 1).astype(
+        np.uint8
+    )
+    stream = bits_matrix.ravel()
+    pad = (8 - stream.size % 8) % 8
+    if pad:
+        stream = np.concatenate([stream, np.zeros(pad, dtype=np.uint8)])
+    return np.packbits(stream).tobytes()
 
 
 def package_size(grid: WeatherGrid, config: DegradeConfig) -> int:
     """Compressed byte size of the degraded package (header + zlib payload).
 
-    The payload is the quantized integer code array, which is what would
-    actually be transmitted; the header carries the scales/offsets.
+    The payload is the b-bit-packed quantized code array, which is what
+    would actually be transmitted; the header carries the scales/offsets.
     """
     payload = b""
-    for name in config.keep_variables:
-        if name not in grid.data:
-            continue
-        arr = grid.data[name]
-        sub = arr[
-            :: config.temporal_stride,
-            :: config.spatial_stride,
-            :: config.spatial_stride,
-        ]
+    for name, sub in _sliced(grid, config).items():
         if config.bits >= 32:
-            codes = sub.astype(np.float32).tobytes()
+            payload += sub.astype(np.float32).tobytes()
         else:
-            levels = 2**config.bits - 1
-            vmin, vmax = float(np.min(sub)), float(np.max(sub))
-            if vmax <= vmin:
-                codes = np.zeros(sub.shape, dtype=np.uint64).tobytes()
-            else:
-                codes = (
-                    np.round((sub - vmin) / (vmax - vmin) * levels)
-                    .astype(np.uint64)
-                    .tobytes()
-                )
-        payload += codes
+            codes, _, _ = _codes(sub, config.bits)
+            payload += _pack_codes(codes, config.bits)
     compressed = zlib.compress(payload, level=9)
     # header: per-variable scale/offset (2 float64) + axes (float64 each)
     header = 16 * len(config.keep_variables)

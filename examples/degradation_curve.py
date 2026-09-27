@@ -24,9 +24,13 @@ from light_router.data.gfs import download_gfs_wind  # noqa: E402
 from light_router.grib import load_grib_wind  # noqa: E402
 from light_router.isochrone import IsochroneRouter, RouterConfig  # noqa: E402
 from light_router.polar import synthetic_cruising_polar  # noqa: E402
-from light_router.staircase import run_staircase, write_csv  # noqa: E402
-from light_router.synthetic import trade_wind_field  # noqa: E402
-from light_router.weather import WeatherGrid  # noqa: E402
+from light_router.staircase import (  # noqa: E402
+    format_summary,
+    run_staircase,
+    write_csv,
+)
+from light_router.synthetic import add_storm, trade_wind_field  # noqa: E402
+from light_router.weather import WeatherGrid, route_grid_box  # noqa: E402
 
 START = (28.0, -15.5)  # Canary Islands
 FINISH = (16.75, -22.9)  # Sal, Cape Verde
@@ -49,26 +53,19 @@ def synthetic_grid() -> WeatherGrid:
     modulation = (factor[:, None] * wave)[None, :, :]
     for name in ("u10", "v10"):
         field.data[name] = (field.data[name] * modulation).astype(np.float32)
-    d = np.sqrt((lats[:, None] - 22.5) ** 2 + (lons[None, :] + 19.0) ** 2)
-    mask = np.exp(-((d / 2.5) ** 2))
-    pulse = 0.5 + 0.5 * np.sin(2 * np.pi * times / 36.0)
-    storm = (mask[None, :, :] * pulse[:, None, None]).astype(np.float32)
-    for name in ("u10", "v10"):
-        field.data[name] = ((1.0 - storm) * field.data[name] + storm * 15.0).astype(
-            np.float32
-        )
-    return field
+    return add_storm(field)
 
 
 def gfs_grid(rundate: str, run_hour: str) -> WeatherGrid:
+    lon_min, lon_max, lat_min, lat_max = route_grid_box(START, FINISH, margin_deg=4.0)
     paths = download_gfs_wind(
         rundate=rundate,
         run_hour=run_hour,
         forecast_hours=list(range(0, 121, 3)),
-        lon_min=-27.0,
-        lon_max=-12.0,
-        lat_min=12.0,
-        lat_max=32.0,
+        lon_min=lon_min,
+        lon_max=lon_max,
+        lat_min=lat_min,
+        lat_max=lat_max,
         cache_dir=CACHE,
     )
     return load_grib_wind(paths)
@@ -109,19 +106,7 @@ def main() -> int:
     out = OUTPUT / "degradation_curve.csv"
     write_csv(rows, out)
 
-    print(
-        f"\n{'budget':>10} {'bytes':>9} {'s/t/b':>10} {'ETA diff':>9} "
-        f"{'dist diff':>9} {'VMG diff':>8} {'decision':>8} {'geo div':>8}"
-    )
-    for row in rows:
-        m = row.metrics
-        eta = f"{m.eta_diff_pct:+.1f}%" if m.reached else "n/a"
-        print(
-            f"{row.budget:>10} {row.package_bytes:>9} "
-            f"{row.spatial_stride}/{row.temporal_stride}/{row.bits:>2}   "
-            f"{eta:>9} {m.distance_diff_pct:+7.1f}% {m.vmg_diff_kt:+7.2f} "
-            f"{str(m.decision_divergence):>8} {m.geographic_divergence_nm:7.1f}nm"
-        )
+    print(format_summary(rows))
     print(f"\nCSV written to {out}")
     return 0
 

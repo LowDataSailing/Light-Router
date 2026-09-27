@@ -5,7 +5,7 @@ from light_router.isochrone import IsochroneRouter, RouterConfig
 from light_router.metrics import compare_routes
 from light_router.polar import synthetic_cruising_polar
 from light_router.staircase import STAIRCASE, run_staircase, write_csv
-from light_router.synthetic import trade_wind_field
+from light_router.synthetic import add_storm, trade_wind_field
 
 START = (28.0, -15.5)
 FINISH = (16.75, -22.9)
@@ -42,15 +42,7 @@ def grid():
     # on the direct route: the reference route must dodge it, and coarse
     # sampling misplaces or smears the dodge — smooth fields degrade for
     # free, so the degradation assertion needs a genuinely hard field
-    d = np.sqrt((lats[:, None] - 22.5) ** 2 + (lons[None, :] + 19.0) ** 2)
-    mask = np.exp(-((d / 2.5) ** 2))
-    pulse = 0.5 + 0.5 * np.sin(2 * np.pi * times / 36.0)
-    storm = (mask[None, :, :] * pulse[:, None, None]).astype(np.float32)
-    for name in ("u10", "v10"):
-        field.data[name] = ((1.0 - storm) * field.data[name] + storm * 15.0).astype(
-            np.float32
-        )
-    return field
+    return add_storm(field)
 
 
 def test_staircase_runs_all_levels(grid):

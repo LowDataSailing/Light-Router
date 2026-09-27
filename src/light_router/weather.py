@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .geo import great_circle_distance
-
 
 @dataclass
 class WeatherGrid:
@@ -84,6 +82,7 @@ class WeatherGrid:
         return speed, direction
 
     def grid_extent(self) -> tuple[float, float, float, float]:
+        """Bounding box (lon_min, lon_max, lat_min, lat_max) of the grid."""
         return (
             float(self.lons[0]),
             float(self.lons[-1]),
@@ -118,17 +117,4 @@ def route_grid_box(
         lon_max + margin_deg,
         lat_min - margin_deg,
         lat_max + margin_deg,
-    )
-
-
-def grid_resolution_nm(lats: np.ndarray) -> float:
-    """Mean meridional grid resolution in nautical miles."""
-    if len(lats) < 2:
-        raise ValueError("need at least two latitude steps")
-    return float(
-        np.mean(
-            great_circle_distance(
-                lats[:-1], np.zeros(len(lats) - 1), lats[1:], np.zeros(len(lats) - 1)
-            )
-        )
     )

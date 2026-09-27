@@ -47,7 +47,10 @@ Research question: *How much weather information does a sailing router actually 
 - `grib.py`: load GRIB2 through cfgrib/xarray (optional dependency group
   `grib`; lazy import with a clear error message).
 - `synthetic.py`: deterministic synthetic trade-wind field for tests and offline
-  demo fallback.
+  demo fallback, plus `add_storm()` — a compact, time-pulsing storm overlay
+  placed on the direct route. Smooth uniform fields degrade for free (they
+  compress to a few KB at full fidelity), so the storm is what makes the
+  bandwidth-quality curve measurable.
 
 ### 2. Boat polar (`polar.py`)
 
@@ -78,7 +81,10 @@ Applied in the order fixed by the Benchmark Harness page:
 5. lossless compression (zlib on the quantized payload — measured, not estimated)
 
 `package_size()` returns the honest compressed byte size of the degraded
-forecast package (header + zlib payload).
+forecast package (header + zlib payload). The payload is the quantized code
+array packed at b bits per value — not an upcast intermediate — so the bits
+dimension genuinely moves the measured size. `degrade()` and
+`package_size()` share one quantization helper and cannot diverge.
 
 ### 5. Budget staircase + metrics (`staircase.py`, `metrics.py`)
 
@@ -86,11 +92,14 @@ forecast package (header + zlib payload).
   25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB.
 - For each budget: pick the highest-fidelity configuration (spatial stride,
   temporal stride, bits) whose package fits the budget, re-route, compare to
-  the Level 1 reference route.
+  the Level 1 reference route. "Highest-fidelity" is the lexicographic order
+  (spatial, temporal, bits): spatial resolution first because routing
+  decisions are local, then temporal, then bits.
 - Metrics (reported separately, never combined): ETA difference, distance
   difference, VMG difference, max wind exposure difference, decision divergence
-  (initial-bearing split), geographic divergence (mean nearest-track distance).
-- Output: CSV rows + console summary.
+  (initial-bearing split), geographic divergence (mean distance from each
+  point of the degraded track to the nearest point of the reference track).
+- Output: CSV rows (`write_csv`) + console summary (`format_summary`).
 
 ### 6. Data clients (`data/gfs.py`, `data/chom.py`)
 

@@ -75,6 +75,12 @@ class IsochroneRouter:
         finish: tuple[float, float],
         start_time: float = 0.0,
     ) -> Route:
+        """Compute the route from start to finish, departing at start_time.
+
+        Returns a reached route as soon as a candidate enters the finish
+        radius, or the partial route to the closest reached point if the
+        time horizon is exhausted (Route.reached is False).
+        """
         cfg = self.config
         headings = np.arange(cfg.n_headings, dtype=float) * (360.0 / cfg.n_headings)
 

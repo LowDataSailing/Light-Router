@@ -52,21 +52,7 @@ def stations_measuring(parameter: str, base: str = BASE_URL) -> list[Station]:
     """Referential stations that measure a canonical parameter (e.g.
     'sea_surface_wave_significant_height' for wave buoys)."""
     payload = _get("/ref/stations", {"parametre": parameter}, base=base)
-    features = payload.get("features", [])
-    out: list[Station] = []
-    for feature in features:
-        props = feature.get("properties", {})
-        geom = feature.get("geometry", {}).get("coordinates", [None, None])
-        out.append(
-            Station(
-                ic_id=str(props.get("ic_id", "")),
-                name=str(props.get("libelle", "")),
-                latitude=float(geom[1]) if geom[1] is not None else float("nan"),
-                longitude=float(geom[0]) if geom[0] is not None else float("nan"),
-                country=str(props.get("pays", "")),
-            )
-        )
-    return out
+    return [_station_from_feature(f) for f in payload.get("features", [])]
 
 
 def station_parameters(ic_id: str, base: str = BASE_URL) -> tuple[str, ...]:
@@ -85,3 +71,13 @@ def _station_from(entry: dict) -> Station:
         country=str(entry.get("pays", "")),
         parameters=tuple(entry.get("parametres_mesures", ())),
     )
+
+
+def _station_from_feature(feature: dict) -> Station:
+    """Map a GeoJSON feature from /ref/stations to a Station."""
+    props = feature.get("properties", {})
+    lon, lat = feature.get("geometry", {}).get("coordinates", (None, None))
+    entry = dict(props)
+    entry["latitude"] = lat if lat is not None else float("nan")
+    entry["longitude"] = lon if lon is not None else float("nan")
+    return _station_from(entry)

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from light_router.synthetic import trade_wind_field
-from light_router.weather import WeatherGrid, grid_resolution_nm, route_grid_box
+from light_router.weather import WeatherGrid, route_grid_box
 
 
 def make_grid():
@@ -64,9 +64,3 @@ def test_route_grid_box_covers_both_ends():
     lon_min, lon_max, lat_min, lat_max = box
     assert lon_min <= -22.9 and lon_max >= -15.5
     assert lat_min <= 16.75 and lat_max >= 28.0
-
-
-def test_grid_resolution_nm():
-    lats = np.arange(0.0, 2.01, 0.25)
-    res = grid_resolution_nm(lats)
-    assert 14.0 < res < 16.5  # 0.25 deg ~ 15 nm

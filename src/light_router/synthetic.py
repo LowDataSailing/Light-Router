@@ -13,7 +13,6 @@ def trade_wind_field(
     times: np.ndarray,
     mean_speed_kt: float = 15.0,
     direction_from_deg: float = 60.0,
-    shear_deg: float = 0.0,
 ) -> WeatherGrid:
     """Uniform trade-wind field with a slow temporal modulation.
 
@@ -24,10 +23,9 @@ def trade_wind_field(
     nt, nlat, nlon = len(times), len(lats), len(lons)
     speed = mean_speed_kt * (1.0 + 0.15 * np.sin(2 * np.pi * times / 48.0))
     speed = np.broadcast_to(speed[:, None, None], (nt, nlat, nlon)).copy()
-    direction = direction_from_deg + shear_deg * (lats[None, :, None] - lats[0]) / max(
-        lats[-1] - lats[0], 1e-9
+    direction = np.broadcast_to(
+        np.full((1, 1, 1), direction_from_deg), (nt, nlat, nlon)
     )
-    direction = np.broadcast_to(direction, (nt, nlat, nlon))
 
     speed_ms = speed / 1.94384
     # "from" direction -> vector components of wind flow
@@ -41,41 +39,28 @@ def trade_wind_field(
     )
 
 
-def storm_field(
-    lats: np.ndarray,
-    lons: np.ndarray,
-    times: np.ndarray,
-    storm_center: tuple[float, float] = (40.0, -25.0),
-    storm_radius_deg: float = 6.0,
-    background_kt: float = 15.0,
+def add_storm(
+    field: WeatherGrid,
+    center: tuple[float, float] = (22.5, -19.0),
+    radius_deg: float = 2.5,
+    strength_ms: float = 15.0,
+    period_hours: float = 36.0,
 ) -> WeatherGrid:
-    """Background trades with a rotating storm system (for the storm-avoidance
-    scenario shape). Wind speed peaks at the storm center."""
-    nt, nlat, nlon = len(times), len(lats), len(lons)
-    lat_grid = lats[None, :, None]
-    lon_grid = lons[None, None, :]
-    # storm drifts eastward over time
-    center_lat = storm_center[0]
-    center_lon = storm_center[1] + 0.15 * times[:, None, None]
-    d = np.sqrt(
-        (lat_grid - center_lat) ** 2 + (lat_grid * 0.0 + lon_grid - center_lon) ** 2
-    )
-    storm_mask = np.exp(-((d / storm_radius_deg) ** 2))
-    storm_mask = np.broadcast_to(storm_mask, (nt, nlat, nlon))
+    """Overlay a compact storm pulsing in time; returns a new grid.
 
-    speed = background_kt * (1.0 + 0.15 * np.sin(2 * np.pi * times / 48.0))
-    speed = np.broadcast_to(speed[:, None, None], (nt, nlat, nlon)).copy()
-    speed = speed + 30.0 * storm_mask  # up to ~45 kt in the core
-    # background from NE; storm wind direction swirls around the center
-    direction = 60.0 + 180.0 * storm_mask  # crude: reversed inside the core
-    direction = np.broadcast_to(direction, (nt, nlat, nlon)).copy()
-
-    speed_ms = speed / 1.94384
-    u = -speed_ms * np.sin(np.radians(direction))
-    v = -speed_ms * np.cos(np.radians(direction))
-    return WeatherGrid(
-        times=times,
-        lats=lats,
-        lons=lons,
-        data={"u10": u.astype(np.float32), "v10": v.astype(np.float32)},
-    )
+    The storm wind blows toward the NE (opposing the trade-wind track), so
+    with the default center it sits on the direct Canary -> Cape Verde route
+    and the router must dodge it. Coarse spatial sampling smears or misplaces
+    the dodge, which is what makes the degradation curve measurable — smooth
+    fields degrade for free. Deterministic: no randomness.
+    """
+    lats, lons, times = field.lats, field.lons, field.times
+    d = np.sqrt((lats[:, None] - center[0]) ** 2 + (lons[None, :] - center[1]) ** 2)
+    mask = np.exp(-((d / radius_deg) ** 2))
+    pulse = 0.5 + 0.5 * np.sin(2 * np.pi * times / period_hours)
+    storm = (mask[None, :, :] * pulse[:, None, None]).astype(np.float32)
+    data = {
+        name: ((1.0 - storm) * arr + storm * strength_ms).astype(np.float32)
+        for name, arr in field.data.items()
+    }
+    return WeatherGrid(times=times, lats=lats, lons=lons, data=data)

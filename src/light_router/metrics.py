@@ -27,6 +27,7 @@ class RouteMetrics:
     reached: bool
 
     def as_dict(self) -> dict[str, object]:
+        """Metrics as a flat dict (one CSV/JSON row)."""
         return asdict(self)
 
 
@@ -36,18 +37,21 @@ def _max_wind(route: Route) -> float:
 
 
 def _track_divergence(a: Route, b: Route, n_samples: int = 50) -> float:
-    """Mean nearest-neighbour distance from track a to track b (nm), both
-    resampled to a common index. Asymmetric on purpose: how far the degraded
+    """Mean distance from each point of track a to the nearest point of the
+    reference track b (nm). Both tracks are resampled to `n_samples` points
+    by fractional progress. Asymmetric on purpose: how far the degraded
     route drifts from the reference."""
     if a.n_waypoints < 2 or b.n_waypoints < 2:
         return 0.0
-    ta = np.linspace(0.0, 1.0, n_samples)
-    a_lat = np.interp(ta, np.linspace(0.0, 1.0, a.n_waypoints), a.lat)
-    a_lon = np.interp(ta, np.linspace(0.0, 1.0, a.n_waypoints), a.lon)
-    b_lat = np.interp(ta, np.linspace(0.0, 1.0, b.n_waypoints), b.lat)
-    b_lon = np.interp(ta, np.linspace(0.0, 1.0, b.n_waypoints), b.lon)
-    dist = great_circle_distance(a_lat, a_lon, b_lat, b_lon)
-    return float(np.mean(dist))
+    t = np.linspace(0.0, 1.0, n_samples)
+    a_lat = np.interp(t, np.linspace(0.0, 1.0, a.n_waypoints), a.lat)
+    a_lon = np.interp(t, np.linspace(0.0, 1.0, a.n_waypoints), a.lon)
+    b_lat = np.interp(t, np.linspace(0.0, 1.0, b.n_waypoints), b.lat)
+    b_lon = np.interp(t, np.linspace(0.0, 1.0, b.n_waypoints), b.lon)
+    dist = great_circle_distance(
+        a_lat[:, None], a_lon[:, None], b_lat[None, :], b_lon[None, :]
+    )
+    return float(np.mean(np.min(dist, axis=1)))
 
 
 def compare_routes(
