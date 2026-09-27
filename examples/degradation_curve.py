@@ -8,6 +8,9 @@ Scenario: open-ocean trade wind, Canary Islands -> Cape Verde (no land
 avoidance, single planning-time forecast — see specs/goal-1-baseline.md).
 
 Outputs examples/output/degradation_curve.csv and prints a summary table.
+With --artifacts, also writes a run directory runs/<scenario>/<ts>-<sha>/
+(manifest, GPX/GeoJSON routes, metrics.csv, plots) — see
+specs/goal-1-baseline.md section 7.
 """
 
 from __future__ import annotations
@@ -20,11 +23,13 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from light_router.artifacts import write_artifacts  # noqa: E402
 from light_router.data.gfs import download_gfs_wind  # noqa: E402
 from light_router.grib import load_grib_wind  # noqa: E402
 from light_router.isochrone import IsochroneRouter, RouterConfig  # noqa: E402
 from light_router.polar import synthetic_cruising_polar  # noqa: E402
 from light_router.staircase import (  # noqa: E402
+    STAIRCASE,
     format_summary,
     run_staircase,
     write_csv,
@@ -36,6 +41,7 @@ START = (28.0, -15.5)  # Canary Islands
 FINISH = (16.75, -22.9)  # Sal, Cape Verde
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
 OUTPUT = Path(__file__).resolve().parents[1] / "examples" / "output"
+RUNS = Path(__file__).resolve().parents[1] / "runs"
 
 
 def synthetic_grid() -> WeatherGrid:
@@ -76,6 +82,11 @@ def main() -> int:
     parser.add_argument("--source", choices=["synthetic", "gfs"], default="synthetic")
     parser.add_argument("--rundate", default="20260926")
     parser.add_argument("--run-hour", default="00")
+    parser.add_argument(
+        "--artifacts",
+        action="store_true",
+        help="write a run directory (manifest, GPX/GeoJSON routes, plots)",
+    )
     args = parser.parse_args()
 
     grid = (
@@ -101,13 +112,36 @@ def main() -> int:
             max_hours=150.0,
         ),
     )
-    rows = run_staircase(grid, router, START, FINISH)
+    result = run_staircase(grid, router, START, FINISH)
+    rows = result.rows
 
     out = OUTPUT / "degradation_curve.csv"
     write_csv(rows, out)
 
     print(format_summary(rows))
     print(f"\nCSV written to {out}")
+
+    if args.artifacts:
+        from light_router.artifacts import new_run_dir
+
+        run_dir = new_run_dir(RUNS, scenario=f"{args.source}_canaries_cv")
+        write_artifacts(
+            run_dir,
+            result,
+            grid,
+            scenario=f"{args.source}_canaries_cv",
+            start=START,
+            finish=FINISH,
+            router_config=router.config,
+            staircase=STAIRCASE,
+            source={
+                "type": args.source,
+                "rundate": args.rundate,
+                "run_hour": args.run_hour,
+            },
+        )
+        print(f"artifacts written to {run_dir}")
+        print("re-render later with: uv run python -m light_router.summarize <run_dir>")
     return 0
 
 

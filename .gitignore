@@ -96,3 +96,4 @@ site/
 # Goal 1 prototype artifacts
 data/cache/
 examples/output/
+runs/

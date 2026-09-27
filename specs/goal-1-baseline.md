@@ -121,7 +121,7 @@ dimension genuinely moves the measured size. `degrade()` and
   point of the degraded track to the nearest point of the reference track).
 - Output: CSV rows (`write_csv`) + console summary (`format_summary`).
 
-### 7. Artifacts (opt-in, planned — next increment on this PR)
+### 7. Artifacts (opt-in)
 
 Every staircase run can write a self-contained run directory for inspection and
 comparison. **Opt-in via `--artifacts` (default off)** — plain runs stay fast

@@ -63,6 +63,12 @@ grib = [
     "cfgrib>=0.9.10.4",
     "xarray>=2023.0.0",
 ]
+artifacts = [
+    "gpxpy>=1.6",
+]
+plot = [
+    "matplotlib>=3.7",
+]
 # ml = [
 #     "scikit-learn>=1.2.0",
 #     "torch>=2.0.0",

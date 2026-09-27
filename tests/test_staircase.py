@@ -47,7 +47,7 @@ def grid():
 
 def test_staircase_runs_all_levels(grid):
     router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH)
+    rows = run_staircase(grid, router, START, FINISH).rows
     assert len(rows) == len(STAIRCASE)
     # unlimited row has full fidelity
     assert rows[0].spatial_stride == 1 and rows[0].bits == 32
@@ -59,7 +59,7 @@ def test_staircase_runs_all_levels(grid):
 
 def test_unlimited_row_matches_reference(grid):
     router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH)
+    rows = run_staircase(grid, router, START, FINISH).rows
     first = rows[0]
     assert first.metrics.eta_diff_pct == pytest.approx(0.0, abs=1e-6)
     assert first.metrics.distance_diff_pct == pytest.approx(0.0, abs=1e-6)
@@ -68,7 +68,7 @@ def test_unlimited_row_matches_reference(grid):
 
 def test_degradation_grows_as_budget_shrinks(grid):
     router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH)
+    rows = run_staircase(grid, router, START, FINISH).rows
     # the 1 KB row must be strictly worse than the unlimited row on at least
     # one reported metric (ETA or geographic divergence)
     worst = rows[-1]
@@ -83,7 +83,7 @@ def test_degradation_grows_as_budget_shrinks(grid):
 
 def test_write_csv(tmp_path, grid):
     router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH)
+    rows = run_staircase(grid, router, START, FINISH).rows
     out = tmp_path / "curve.csv"
     write_csv(rows, out)
     content = out.read_text().splitlines()

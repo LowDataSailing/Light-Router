@@ -8,7 +8,7 @@ degradation against the Level 1 full-information reference route.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
@@ -40,6 +40,15 @@ class StaircaseRow:
     temporal_stride: int
     bits: int
     metrics: RouteMetrics
+    route: Route = field(repr=False, compare=False)
+
+
+@dataclass
+class StaircaseResult:
+    """Staircase output: one row per budget plus the Level 1 reference route."""
+
+    rows: list[StaircaseRow]
+    reference: Route
 
 
 def run_staircase(
@@ -48,7 +57,7 @@ def run_staircase(
     start: tuple[float, float],
     finish: tuple[float, float],
     staircase: list[int | None] | None = None,
-) -> list[StaircaseRow]:
+) -> StaircaseResult:
     """Run the degradation curve experiment. Returns one row per budget."""
     staircase = staircase if staircase is not None else STAIRCASE
     reference = router.route(start, finish)
@@ -64,7 +73,7 @@ def run_staircase(
         if config is None:
             continue  # budget unreachable even fully degraded
         rows.append(_run_level(router, reference, grid, config, budget, start, finish))
-    return rows
+    return StaircaseResult(rows=rows, reference=reference)
 
 
 def _run_level(
@@ -98,6 +107,7 @@ def _run_level(
         temporal_stride=config.temporal_stride,
         bits=config.bits,
         metrics=metrics,
+        route=route,
     )
 
 
