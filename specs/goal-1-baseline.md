@@ -2,8 +2,28 @@
 
 Status: implemented (prototype) — see PR for review.
 Source of truth: Notion workspace pages "Goal 1: Degradation Curve", "Baseline System
-(Level 1)", "Benchmark Harness", "Test Scenarios", "Decisions Log" (#1, #2, #4, #9).
+(Level 1)", "Benchmark Harness", "Test Scenarios", "Decisions Log" (#1, #2, #4, #9,
+#15-#18), plus the cross-goal specs `compatibility-principles.md` and
+`data-pipeline.md` in this directory.
 This file is the working spec for this PR; the user-facing docs site is unchanged.
+
+## Compatibility rules honored here
+
+Per `compatibility-principles.md` (binding on every PR), this prototype honors:
+
+- **Rule 2 (Router protocol):** `IsochroneRouter.route(start, finish, start_time)
+  -> Route` matches the protocol signature, so the oracle subprocess can replace
+  it without touching the harness. The in-repo isochrone is the *provisional
+  surrogate* (Decision #15); it is labeled as such until validated against the
+  industry oracle.
+- **Rule 4 (real data):** reported staircase results run on real GFS forecasts
+  (`data/gfs.py`); the synthetic fields are unit-test fixtures and offline demo
+  fallback only.
+- **Rule 5 (polar format):** `PolarTable` loads from a table so an
+  OpenCPN-compatible polar file can replace the synthetic fixture (Decision #12)
+  without touching the router.
+- Rules 1 (CF xarray) and 3 (Gymnasium semantics) land with the scenario-package
+  and dataset work (Goal 2); `WeatherGrid` is the documented transitional view.
 
 ## Objective
 
@@ -101,7 +121,30 @@ dimension genuinely moves the measured size. `degrade()` and
   point of the degraded track to the nearest point of the reference track).
 - Output: CSV rows (`write_csv`) + console summary (`format_summary`).
 
-### 6. Data clients (`data/gfs.py`, `data/chom.py`)
+### 7. Artifacts (opt-in, planned — next increment on this PR)
+
+Every staircase run can write a self-contained run directory for inspection and
+comparison. **Opt-in via `--artifacts` (default off)** — plain runs stay fast
+and CI-friendly.
+
+Run directory layout: `runs/<scenario>/<timestamp>-<gitsha>/`
+
+- `manifest.json` — config, code version (git SHA), data provenance and
+  checksums (the "control" part of the run)
+- `route_reference.gpx` + `route_<budget>.gpx` — GPX is the sailing-world
+  standard (opens directly in OpenCPN); a GeoJSON twin is written for web
+  viewers and QGIS
+- `metrics.csv` — the staircase table (same rows as the console summary)
+- Plots (matplotlib, optional dependency group `plot`):
+  1. all tracks color-coded by budget on a wind-field underlay
+  2. degradation curves per metric vs budget (log-x)
+  3. package size vs fidelity
+- `summarize` command re-renders all comparisons from an existing run
+  directory without re-running the router
+
+Same inputs produce the same artifact content (Decision #18).
+
+### 8. Data clients (`data/gfs.py`, `data/chom.py`)
 
 - `gfs.py`: NOMADS grib-filter URL builder + downloader for U10/V10 subsets.
 - `chom.py`: minimal client for the open InfoClimat/CHOM climatology API
