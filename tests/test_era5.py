@@ -1,0 +1,92 @@
+"""ERA5 client: URL building and wind conversion (no network)."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from light_router.data.era5 import (
+    _grid_from_arrays,
+    _hours_since_start,
+    era5_url,
+)
+
+
+def test_era5_url_batches_points():
+    url = era5_url([28.0, 24.0], [-15.5, -18.5], "2025-09-01", "2025-09-07")
+    assert url.startswith("https://archive-api.open-meteo.com/v1/era5?")
+    assert "latitude=28%2C24" in url
+    assert "longitude=-15.5%2C-18.5" in url
+    assert "start_date=2025-09-01" in url
+    assert "hourly=wind_speed_10m%2Cwind_direction_10m" in url
+
+
+def test_hours_since_start():
+    hours = _hours_since_start(
+        ["2025-09-01T00:00", "2025-09-01T06:00", "2025-09-02T00:00"],
+        "2025-09-01",
+    )
+    assert hours[0] == 0.0
+    assert hours[1] == 6.0
+    assert hours[2] == 24.0
+
+
+def test_grid_from_arrays_converts_wind():
+    """speed/dir (km/h, FROM) -> u/v (m/s); layout (time, lat, lon)."""
+    lats = np.array([10.0, 10.5])
+    lons = np.array([-20.0, -19.5])
+    times = np.array([0.0, 6.0])
+    # one point sample per (lat, lon): 4 points, 2 times
+    speed = np.array([[10.0, 20.0], [10.0, 20.0], [10.0, 20.0], [10.0, 20.0]])
+    direction = np.zeros((4, 2))  # wind from north
+    ds = _grid_from_arrays(lats, lons, times, speed, direction)
+    assert dict(ds.sizes) == {"time": 2, "latitude": 2, "longitude": 2}
+    # wind from the north blows southward: u ~ 0, v < 0
+    u10 = ds["u10"].values
+    v10 = ds["v10"].values
+    assert np.allclose(u10, 0.0, atol=1e-6)
+    assert np.all(v10 < 0)
+    # 10 km/h from north at t=0, 20 km/h at t=6
+    assert np.allclose(np.abs(v10[0]), 10.0 / 3.6, atol=1e-4)
+    assert np.allclose(np.abs(v10[1]), 20.0 / 3.6, atol=1e-4)
+
+
+def test_fetch_retries_on_rate_limit(monkeypatch):
+    """A 429 from the API is retried after Retry-After, not fatal."""
+    import urllib.error
+
+    from light_router.data import era5
+
+    payload = [
+        {
+            "hourly": {
+                "time": ["2025-09-01T00:00", "2025-09-01T01:00"],
+                "wind_speed_10m": [10.0, 10.0],
+                "wind_direction_10m": [0.0, 0.0],
+            }
+        }
+        for _ in range(2)
+    ]
+    calls: list[str] = []
+
+    def fake_fetch(url: str, timeout_s: int) -> object:
+        calls.append(url)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(
+                url, 429, "Too Many Requests", {"Retry-After": "0"}, None
+            )
+        return payload
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(era5, "_fetch_json", fake_fetch)
+    monkeypatch.setattr(era5.time, "sleep", lambda s: sleeps.append(s))
+    ds = era5.fetch_era5_wind_grid(
+        np.array([10.0, 10.5]),
+        np.array([-20.0, -19.5]),
+        "2025-09-01",
+        "2025-09-01",
+        batch_size=2,
+        pause_s=0.0,
+    )
+    assert len(calls) == 3  # 429 + retry, then the second batch
+    assert sleeps == [0.0]  # honored Retry-After
+    assert dict(ds.sizes) == {"time": 2, "latitude": 2, "longitude": 2}

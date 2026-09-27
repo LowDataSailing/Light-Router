@@ -102,3 +102,6 @@ runs/*
 # committed real-data review run (PR #3)
 !runs/gfs_canaries_cv/
 !runs/gfs_canaries_cv/**
+# committed real-data operational run (PR #3)
+!runs/operational_canaries_cv/
+!runs/operational_canaries_cv/**

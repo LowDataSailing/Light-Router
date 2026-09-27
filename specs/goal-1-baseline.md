@@ -148,6 +148,38 @@ dimension genuinely moves the measured size. `degrade()` and
   point of the degraded track to the nearest point of the reference track).
 - Output: CSV rows (`write_csv`) + console summary (`format_summary`).
 
+### 6. Operational passage simulation (`simulate.py`, `data/era5.py`)
+
+The staircase above answers "how much worse is the route computed from one
+degraded forecast?" A real router at sea answers a different question: it
+receives a new (degraded) forecast every cycle, replans from its current
+position, and the boat sails on whatever the weather actually does. The
+operational simulation mimics that, virtually, for a past passage — the
+whole passage is one experiment (one episode):
+
+- **Truth**: the boat advances on measured weather — ERA5 reanalysis via
+  the Open-Meteo archive API (`data/era5.py`, no key; batched point
+  requests reassembled into a grid, throttled + retried against the API's
+  rate limits). The truth grid is on the absolute passage clock (hours
+  since passage start).
+- **Cycles**: every `cycle_hours` (aligned with GFS 00/06/12/18Z) the
+  router receives the newest GFS run, degraded to the budget
+  (`best_config_for_budget` -> `degrade`), and replans from its current
+  position through the Router protocol (rule 2). If the budget is
+  unreachable even fully degraded, the boat keeps the previous plan.
+- **Advance**: each `dt_hours` step the boat follows the current plan at
+  the speed the *true* wind allows (polar speed at the experienced
+  TWA) — never the forecast wind.
+- `run_operational_staircase` repeats the passage once per budget; the
+  reward-relevant number is actual passage time vs the unlimited-data
+  reference, plus total bytes received.
+- Artifacts (opt-in, same `--artifacts` flag): the operational run
+  directory adds `passage.csv` (one row per budget: actual outcome) and
+  `cycles.csv` (one row per planning cycle: what was received and
+  believed), writes the actual tracks as `track_<budget>.gpx/.geojson`,
+  and plots the tracks on the measured-wind underlay plus the
+  passage-time-vs-budget curve.
+
 ### 7. Artifacts (opt-in)
 
 Every staircase run can write a self-contained run directory for inspection and
@@ -181,15 +213,20 @@ Same inputs produce the same artifact content (Decision #18).
   Required for any scenario older than ~14 days (rule 4).
 - `chom.py`: minimal client for the open InfoClimat/CHOM climatology API
   (station search, station-parameter availability). No key required.
+- `era5.py`: ERA5 reanalysis (the measured-weather truth) via the
+  Open-Meteo archive API; feeds the operational simulation above.
 
 ## Tests
 
 pytest, no network: geo math, interpolation, polar, isochrone on synthetic
 fields (reaches finish, sane ETA), pipeline monotonicity + byte accounting,
 staircase budget fitting, metrics identity, URL builders, CHOM client with
-mocked HTTP.
+mocked HTTP, ERA5 wind conversion + rate-limit retry (mocked), simulation
+loop on synthetic truth/forecasts (replan boundaries, budget caps,
+truth-not-forecast), operational artifacts layout.
 
 ## Out of scope (explicitly)
 
-Land avoidance, currents/waves in routing, Mode B (reanalysis) evaluation,
-variable-value experiment (Phase 3), multi-scenario suite (Phase 4), any ML.
+Land avoidance, currents/waves in routing, Mode B (routing *on* reanalysis
+forecasts — ERA5 is used as measured truth only), variable-value experiment
+(Phase 3), multi-scenario suite (Phase 4), any ML.

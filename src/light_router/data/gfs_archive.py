@@ -11,6 +11,8 @@ technique the Herbie library uses.
 
 from __future__ import annotations
 
+import concurrent.futures
+import functools
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,31 +103,69 @@ def download_gfs_archive_wind(
     variables: tuple[str, ...] = ("UGRD", "VGRD"),
     level: str = "10 m above ground",
     timeout_s: int = 120,
+    workers: int = 1,
 ) -> list[Path]:
     """Download archived GFS wind messages into cache_dir (skips existing).
 
     Each forecast hour yields one small GRIB2 file containing just the
     requested messages, extracted from the ~1 GB archive file with HTTP
     range requests. Returns the local paths, ordered by forecast hour.
+    ``workers`` > 1 fetches forecast hours concurrently.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    paths: list[Path] = []
-    for fh in sorted(forecast_hours):
-        dest = cache_dir / f"gfs_{rundate}{run_hour}_f{fh:03d}.grib2"
-        if not dest.exists():
-            grib_url, idx_url = gfs_archive_urls(rundate, run_hour, fh)
-            entries = parse_grib_index(_fetch_text(idx_url, timeout_s))
-            wanted = [
-                e for e in entries if e.variable in variables and e.level == level
-            ]
-            if len(wanted) != len(variables):
-                raise ValueError(
-                    f"archive index for f{fh:03d} has {len(wanted)} matching "
-                    f"messages, expected {variables} at {level!r}"
-                )
-            with open(dest, "wb") as out:
-                for entry in wanted:
-                    start, end = message_byte_range(entries, entry)
-                    out.write(_fetch_range(grib_url, start, end, timeout_s))
-        paths.append(dest)
-    return paths
+    todo = [
+        fh
+        for fh in sorted(forecast_hours)
+        if not (cache_dir / _cache_name(rundate, run_hour, fh)).exists()
+    ]
+    if todo:
+        fetch = functools.partial(
+            _download_hour,
+            rundate=rundate,
+            run_hour=run_hour,
+            cache_dir=cache_dir,
+            variables=variables,
+            level=level,
+            timeout_s=timeout_s,
+        )
+        if workers <= 1:
+            for fh in todo:
+                fetch(fh)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                list(pool.map(fetch, todo))
+    return [
+        cache_dir / _cache_name(rundate, run_hour, fh) for fh in sorted(forecast_hours)
+    ]
+
+
+def _cache_name(rundate: str, run_hour: str, forecast_hour: int) -> str:
+    return f"gfs_{rundate}{run_hour}_f{forecast_hour:03d}.grib2"
+
+
+def _download_hour(
+    forecast_hour: int,
+    *,
+    rundate: str,
+    run_hour: str,
+    cache_dir: Path,
+    variables: tuple[str, ...],
+    level: str,
+    timeout_s: int,
+) -> None:
+    """Fetch one forecast hour's wind messages into the cache."""
+    dest = cache_dir / _cache_name(rundate, run_hour, forecast_hour)
+    grib_url, idx_url = gfs_archive_urls(rundate, run_hour, forecast_hour)
+    entries = parse_grib_index(_fetch_text(idx_url, timeout_s))
+    wanted = [e for e in entries if e.variable in variables and e.level == level]
+    if len(wanted) != len(variables):
+        raise ValueError(
+            f"archive index for f{forecast_hour:03d} has {len(wanted)} matching "
+            f"messages, expected {variables} at {level!r}"
+        )
+    tmp = dest.with_suffix(".part")
+    with open(tmp, "wb") as out:
+        for entry in wanted:
+            start, end = message_byte_range(entries, entry)
+            out.write(_fetch_range(grib_url, start, end, timeout_s))
+    tmp.rename(dest)

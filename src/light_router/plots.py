@@ -16,6 +16,7 @@ import numpy as np
 import xarray as xr
 
 from .isochrone import Route
+from .simulate import PassageResult
 from .staircase import StaircaseResult
 
 
@@ -159,3 +160,47 @@ def write_plots(run_dir: Path, result: StaircaseResult, weather: xr.Dataset) -> 
     plot_tracks(run_dir / "plot_tracks.png", tracks, weather)
     plot_degradation(run_dir / "plot_degradation.png", result)
     plot_size_fidelity(run_dir / "plot_size_fidelity.png", result)
+
+
+def plot_passage_budget(out_path: Path, results: list[PassageResult]) -> None:
+    """Operational chart: actual passage time vs per-cycle data budget."""
+    plt = _require_pyplot()
+    unlimited = next((r for r in results if r.budget_bytes is None), None)
+    rows = [r for r in results if r.budget_bytes is not None]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    if rows:
+        budgets = np.array([r.budget_bytes for r in rows], dtype=float)
+        hours = np.array([r.passage_hours for r in rows], dtype=float)
+        ax.plot(budgets, hours, "o-")
+        ax.set_xscale("log")
+    if unlimited is not None:
+        ax.axhline(
+            unlimited.passage_hours,
+            color="black",
+            linestyle="--",
+            label=f"unlimited data ({unlimited.passage_hours:.1f} h)",
+        )
+    ax.set_xlabel("data budget per forecast cycle (bytes, log)")
+    ax.set_ylabel("actual passage time (h)")
+    ax.set_title("Passage time vs bandwidth budget (measured weather)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
+def write_operational_plots(
+    run_dir: Path, results: list[PassageResult], truth: xr.Dataset
+) -> None:
+    """Write the operational charts: actual tracks on the truth wind, budget curve."""
+    from .artifacts import operational_budget_label
+
+    tracks = {operational_budget_label(r.budget_bytes): r.as_route() for r in results}
+    plot_tracks(
+        run_dir / "plot_tracks.png",
+        tracks,
+        truth,
+        title="Actual tracks by budget (measured wind underlay)",
+    )
+    plot_passage_budget(run_dir / "plot_passage_budget.png", results)
