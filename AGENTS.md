@@ -20,8 +20,3 @@ Default triage vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`,
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See
 `docs/agents/domain.md`.
-
-### Coding standards
-
-`CODING_STANDARDS.md` at the repo root is the standards source for
-`/code-review`.
