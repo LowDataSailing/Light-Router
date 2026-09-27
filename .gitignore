@@ -105,3 +105,4 @@ runs/*
 # committed real-data operational run (PR #3)
 !runs/operational_canaries_cv/
 !runs/operational_canaries_cv/**
+data/packs/

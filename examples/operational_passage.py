@@ -22,10 +22,16 @@ Usage:
     uv run python examples/operational_passage.py --artifacts  # + run directory
     uv run python examples/operational_passage.py --start-date 2025-09-01 \
         --budgets unlimited,100000,10000,5000,2000,1000
+    uv run python examples/operational_passage.py --export-pack data/packs/ccv
+    uv run python examples/operational_passage.py --pack data/packs/ccv \
+        --artifacts          # rerun offline from the pack, no network/GRIB
 
 GRIB loading needs the ``grib`` dependency group and a system ecCodes
 library (Debian: ``apt install libeccodes0``). Downloads are cached under
-data/cache/ — re-runs are free.
+data/cache/ — re-runs are free. A data pack (--export-pack) is a
+self-contained copy of the experiment's inputs (truth + cycles, sha256
+manifest); running with --pack needs neither the network nor the GRIB
+toolchain.
 """
 
 from __future__ import annotations
@@ -45,6 +51,7 @@ from light_router.artifacts import (  # noqa: E402
 )
 from light_router.data.era5 import fetch_era5_wind_grid  # noqa: E402
 from light_router.data.gfs_archive import download_gfs_archive_wind  # noqa: E402
+from light_router.data.pack import load_pack, write_pack  # noqa: E402
 from light_router.grib import load_grib_wind  # noqa: E402
 from light_router.isochrone import RouterConfig  # noqa: E402
 from light_router.polar import synthetic_cruising_polar  # noqa: E402
@@ -130,6 +137,16 @@ def main() -> int:
     parser.add_argument("--budgets", default=DEFAULT_BUDGETS)
     parser.add_argument("--workers", type=int, default=8, help="parallel downloads")
     parser.add_argument(
+        "--pack",
+        help="run entirely from a data pack directory (no network, no GRIB "
+        "toolchain); see --export-pack",
+    )
+    parser.add_argument(
+        "--export-pack",
+        help="after fetching truth + cycles, write them as a data pack to "
+        "this directory for offline reruns",
+    )
+    parser.add_argument(
         "--artifacts",
         action="store_true",
         help="write a run directory (manifest, GPX/GeoJSON tracks, plots)",
@@ -140,8 +157,30 @@ def main() -> int:
     budgets = parse_budgets(args.budgets)
     extent = route_grid_box(START, FINISH, margin_deg=4.0)
 
-    truth = era5_truth(start, args.days, extent)
-    cycles = gfs_cycles(start, args.days, extent, args.workers)
+    if args.pack:
+        truth, cycles = load_pack(Path(args.pack))
+        print(
+            f"pack {args.pack}: truth {truth.sizes['time']} steps "
+            f"{truth.sizes['latitude']}x{truth.sizes['longitude']}, "
+            f"{len(cycles)} forecast cycles"
+        )
+    else:
+        truth = era5_truth(start, args.days, extent)
+        cycles = gfs_cycles(start, args.days, extent, args.workers)
+        if args.export_pack:
+            pack_dir = write_pack(
+                Path(args.export_pack),
+                scenario="operational_canaries_cv",
+                truth=truth,
+                cycles=cycles,
+                source={
+                    "truth": "ERA5 (Open-Meteo archive API)",
+                    "forecasts": "GFS 0.25 deg (NOAA AWS archive)",
+                    "start_date": args.start_date,
+                    "cycle_hours": 6,
+                },
+            )
+            print(f"data pack written to {pack_dir}")
     print(
         f"truth: {truth.sizes['time']} steps, "
         f"{truth.sizes['latitude']}x{truth.sizes['longitude']}; "
@@ -189,6 +228,7 @@ def main() -> int:
                 "forecasts": "GFS 0.25 deg (NOAA AWS archive)",
                 "start_date": args.start_date,
                 "cycle_hours": 6,
+                **({"pack": args.pack} if args.pack else {}),
             },
         )
         print(f"\nartifacts written to {run_dir}")

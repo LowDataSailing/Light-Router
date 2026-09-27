@@ -179,6 +179,15 @@ whole passage is one experiment (one episode):
   believed), writes the actual tracks as `track_<budget>.gpx/.geojson`,
   and plots the tracks on the measured-wind underlay plus the
   passage-time-vs-budget curve.
+- **Data packs** (`data/pack.py`): `--export-pack DIR` writes the
+  experiment's inputs (truth + cycles) as a self-contained,
+  checksummed directory (compressed npz + `pack.json` manifest with
+  sha256 per file); `--pack DIR` reruns the experiment with zero
+  network access and no GRIB toolchain, verifying checksums on load.
+  Packs and raw caches are heavy data: they stay on the fetch machine
+  (gitignored, `data/packs/`, `data/cache/`), never in git; the
+  manifest is mirrored off-site (Google Drive) as the provenance
+  record.
 
 ### 7. Artifacts (opt-in)
 
