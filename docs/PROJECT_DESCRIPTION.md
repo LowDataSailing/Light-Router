@@ -61,7 +61,7 @@ See [Benchmarking](benchmarking.md) for full methodology.
 
 ## Collaborations
 
-Weather data: [NOAA NOMADS](https://nomads.ncep.noaa.gov), [ECMWF Open Data](https://data.ecmwf.int) (free since Oct 2025), [Copernicus Marine Service](https://marine.copernicus.eu), [Saildocs](http://www.saildocs.com), [Infoclimat](https://www.infoclimat.fr) (not yet contacted).
+Weather data: [NOAA NOMADS](https://nomads.ncep.noaa.gov), [ECMWF Open Data](https://data.ecmwf.int) (free since Oct 2025), [Copernicus Marine Service](https://marine.copernicus.eu), [Saildocs](http://www.saildocs.com), [Infoclimat](https://www.infoclimat.fr) (partnership — primary data source).
 
 Simulation: [Freewinds.world](https://freewinds.world) (not yet contacted).
 

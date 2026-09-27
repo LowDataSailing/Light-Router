@@ -13,7 +13,7 @@ Measure route quality as a function of daily data budget (1 KB to unlimited). Di
 Build a baseline: GRIB parser, weather grid, boat polar, isochrone router, one route. No AI, no compression. Then progressively constrain the data budget:
 
 ```
-1 MB -> 500 KB -> 250 KB -> 100 KB -> 50 KB -> 25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB
+Unlimited -> 1 MB -> 500 KB -> 250 KB -> 100 KB -> 50 KB -> 25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB
 ```
 
 Measure at each level:
@@ -91,6 +91,8 @@ weather -> encoder -> latent (N bytes) -> transmit -> decoder -> isochrone -> RO
 
 Loss: `L = alpha * reconstruction_error + beta * routing_degradation` (beta should dominate).
 
+The key design tension: if beta dominates, reconstruction becomes negligible and the encoder may produce latents optimized for routing but unusable weather when decoded. In Level 3, the decoder must output weather good enough for the isochrone algorithm to produce a safe route. Candidate resolutions: a minimum reconstruction quality floor (constraint, not weighted term), two-phase training (reconstruction pre-training, then routing fine-tuning), or separate reconstruction and routing losses with a hard constraint on reconstruction.
+
 ### Joint encoder-router (Level 4 — optional extension)
 
 Train the encoder and router jointly end-to-end. The router learns to operate directly in the compressed representation space. No intermediate weather reconstruction.
@@ -125,6 +127,8 @@ Approach: start with manufacturer polar, observe (GPS speed, wind, heading, heel
 
 Transformers could model temporal dependence in boat performance (sail changes take time, waves have memory, boat acceleration has dynamics): V_t = f(X_{t-n}, ..., X_{t-1}, X_t).
 
+Data requirements: this goal has the opposite data direction from Goals 1 and 2. Goals 1-2 need archived forecasts as router input; Goal 3 needs reanalysis as ground truth for what the boat actually experienced.
+
 ## Goal 4: Safety Under Forecast Uncertainty
 
 Minimize probability of exposure to predefined hazardous conditions under forecast uncertainty.
@@ -137,6 +141,8 @@ Probabilistic safety metrics:
 - P(Wind > 40 kt | forecast) — route around areas exceeding a threshold
 - P(H_s > 6 m | forecast) — significant wave height exceedance probability
 - P(rapid deterioration | forecast) — probability of conditions worsening faster than a defined rate
+
+Data requirements: safety metrics need forecast uncertainty (ensemble spread), which requires archived ensemble forecasts rather than reanalysis.
 
 ## Experimental Design
 
