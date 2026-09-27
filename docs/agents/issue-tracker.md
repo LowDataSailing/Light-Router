@@ -1,45 +1,82 @@
-# Issue tracker: GitHub
+# Issue tracker: GitHub (via the GitHub MCP connector)
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and specs for this repo live as GitHub issues. Use the **GitHub
+connector** (`connector_github_app.*` tool functions) for all operations —
+not the `gh` CLI. Repo: `LowDataSailing/Light-Router`.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+- **Create an issue**: `connector_github_app.issue_write` with
+  `method: "create"`, `title`, `body`, optional `labels` / `assignees`.
+  Labels that don't exist yet are created automatically (write access
+  required) — this is how the triage vocabulary was initialized (issue #5).
+- **Read an issue**: `connector_github_app.issue_read` with
+  `method: "get"` (details), `"get_comments"`, or `"get_labels"`.
+- **List issues**: `connector_github_app.list_issues` with `state: "OPEN"`
+  and `labels: ["<label>"]` filters. Use `fields` to trim large responses
+  (drop `body` when you only need the queue).
+- **Comment on an issue**: `connector_github_app.add_issue_comment`
+  (also works on PRs by passing the PR number).
+- **Apply labels**: `connector_github_app.issue_write` with
+  `method: "update"`, `issue_number`, and the **full desired label set** in
+  `labels` (update replaces, it doesn't append — read current labels first
+  with `issue_read` `method: "get_labels"`).
+- **Close**: `connector_github_app.issue_write` with `method: "update"`,
+  `state: "closed"`, `state_reason: "completed"` (or `"not_planned"` for
+  wontfix).
 
-Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+## Pull requests
+
+- **Create**: `connector_github_app.create_pull_request`.
+- **Read**: `connector_github_app.pull_request_read`; list with
+  `list_pull_requests` / `search_pull_requests`.
+- **Update / merge**: `update_pull_request`, `merge_pull_request` — merging
+  is a human decision; agents do not merge without explicit instruction.
+
+GitHub shares one number space across issues and PRs, so a bare `#42` may be
+either: try `issue_read`, and fall back to `pull_request_read`.
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** _(Set to `yes` if this repo treats external
+PRs as feature requests; `/triage` reads this flag.)_
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
-
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
-
-GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
+When set to `yes`, PRs run through the same labels and states as issues:
+list external PRs with `list_pull_requests`, keep only authors who are not
+`OWNER`/`MEMBER`/`COLLABORATOR`, and label/comment/close with the issue tools
+above (they accept PR numbers).
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue.
+Create a GitHub issue with `issue_write`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Run `issue_read` with `method: "get"` and `"get_comments"`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as
+tickets.
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
-- **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Map**: a single issue labelled `wayfinder:map`, holding the Notes /
+  Decisions-so-far / Fog body. Create with `issue_write` +
+  `labels: ["wayfinder:map"]`.
+- **Child ticket**: create with `issue_write` and `parent_issue_number`
+  (attaches the sub-issue in the same operation), or attach an existing
+  issue with `connector_github_app.sub_issue_write`. Labels:
+  `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once
+  claimed, the ticket is assigned to the driving dev.
+- **Blocking**: the connector does not expose GitHub's native issue
+  dependencies, so use the body-line convention: put
+  `Blocked by: #<n>, #<n>` at the top of the child body. A ticket is
+  unblocked when every blocker is closed (check with `issue_read`).
+- **Frontier query**: `list_issues` with `state: "OPEN"`, scope to the map's
+  children (`issue_read` `method: "get_sub_issues"` on the map), drop any
+  with an open blocker in its `Blocked by:` line or an assignee; first in
+  map order wins.
+- **Claim**: `issue_write` `method: "update"` with `assignees: ["<you>"]`,
+  the session's first write.
+- **Resolve**: `add_issue_comment` with the answer, then close via
+  `issue_write`, then append a context pointer (gist + link) to the map's
+  Decisions-so-far.
