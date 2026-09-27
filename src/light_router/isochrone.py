@@ -198,7 +198,12 @@ class IsochroneRouter:
                     )
                 )
                 return self._backtrack(
-                    levels, reached_idx, start, start_time, reached=True
+                    levels,
+                    len(levels) - 1,
+                    reached_idx,
+                    start,
+                    start_time,
+                    reached=True,
                 )
 
             kept = self._prune(flat_lat, flat_lon, remaining, cfg)
@@ -220,7 +225,9 @@ class IsochroneRouter:
 
         # Horizon exhausted: return the partial route to the closest reached point.
         best_level, best_idx = self._closest_point(levels, finish)
-        route = self._backtrack(levels, best_idx, start, start_time, reached=False)
+        route = self._backtrack(
+            levels, best_level, best_idx, start, start_time, reached=False
+        )
         return route
 
     def _prune(
@@ -255,14 +262,16 @@ class IsochroneRouter:
     def _backtrack(
         self,
         levels: list[_Level],
-        level_idx: int,
+        level_no: int,
+        point_idx: int,
         start: tuple[float, float],
         start_time: float,
         reached: bool,
     ) -> Route:
+        """Rebuild the route ending at ``levels[level_no][point_idx]``."""
         lats, lons, headings, speeds, twss, twas = [], [], [], [], [], []
-        idx = level_idx
-        for level in reversed(levels[: level_idx + 1]):
+        idx = point_idx
+        for level in reversed(levels[: level_no + 1]):
             lats.append(level.lat[idx])
             lons.append(level.lon[idx])
             headings.append(level.heading[idx])
