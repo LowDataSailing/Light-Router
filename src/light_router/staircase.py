@@ -1,0 +1,142 @@
+"""Budget staircase runner: the Goal 1 core experiment.
+
+For each budget level, pick the highest-fidelity degradation configuration
+that fits, re-route on the degraded weather, and measure route-quality
+degradation against the Level 1 full-information reference route.
+"""
+
+from __future__ import annotations
+
+import csv
+from dataclasses import dataclass
+from pathlib import Path
+
+from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
+from .isochrone import IsochroneRouter, Route
+from .metrics import RouteMetrics, compare_routes
+from .weather import WeatherGrid
+
+STAIRCASE: list[int | None] = [
+    None,  # unlimited
+    1_000_000,  # 1 MB
+    500_000,
+    250_000,
+    100_000,
+    50_000,
+    25_000,
+    10_000,  # target operating point
+    5_000,
+    2_000,
+    1_000,
+]
+
+
+@dataclass
+class StaircaseRow:
+    budget: str
+    budget_bytes: int | None
+    package_bytes: int
+    spatial_stride: int
+    temporal_stride: int
+    bits: int
+    metrics: RouteMetrics
+
+
+def run_staircase(
+    grid: WeatherGrid,
+    router: IsochroneRouter,
+    start: tuple[float, float],
+    finish: tuple[float, float],
+    staircase: list[int | None] | None = None,
+) -> list[StaircaseRow]:
+    """Run the degradation curve experiment. Returns one row per budget."""
+    staircase = staircase if staircase is not None else STAIRCASE
+    reference = router.route(start, finish)
+    if not reference.reached:
+        raise RuntimeError(
+            "reference route did not reach the finish; the scenario or the "
+            "router horizon is mis-configured"
+        )
+
+    rows: list[StaircaseRow] = []
+    for budget in staircase:
+        config = best_config_for_budget(grid, budget)
+        if config is None:
+            continue  # budget unreachable even fully degraded
+        rows.append(_run_level(router, reference, grid, config, budget, start, finish))
+    return rows
+
+
+def _run_level(
+    router: IsochroneRouter,
+    reference: Route,
+    grid: WeatherGrid,
+    config: DegradeConfig,
+    budget: int | None,
+    start: tuple[float, float],
+    finish: tuple[float, float],
+) -> StaircaseRow:
+    degraded_grid = degrade(grid, config)
+    size = package_size(grid, config)
+    degraded_router = IsochroneRouter(
+        grid=degraded_grid, polar=router.polar, config=router.config
+    )
+    route = degraded_router.route(start, finish)
+    metrics = compare_routes(reference, route, finish)
+    label = (
+        "unlimited"
+        if budget is None
+        else f"{budget // 1000} KB" if budget >= 1000 else f"{budget} B"
+    )
+    return StaircaseRow(
+        budget=label,
+        budget_bytes=budget,
+        package_bytes=size,
+        spatial_stride=config.spatial_stride,
+        temporal_stride=config.temporal_stride,
+        bits=config.bits,
+        metrics=metrics,
+    )
+
+
+def write_csv(rows: list[StaircaseRow], path: Path) -> None:
+    """Write the degradation curve as CSV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(
+            [
+                "budget",
+                "package_bytes",
+                "spatial_stride",
+                "temporal_stride",
+                "bits",
+                "reached",
+                "eta_diff_pct",
+                "distance_diff_pct",
+                "vmg_diff_kt",
+                "max_wind_diff_kt",
+                "decision_divergence",
+                "initial_bearing_diff_deg",
+                "geographic_divergence_nm",
+            ]
+        )
+        for row in rows:
+            m = row.metrics
+            writer.writerow(
+                [
+                    row.budget,
+                    row.package_bytes,
+                    row.spatial_stride,
+                    row.temporal_stride,
+                    row.bits,
+                    m.reached,
+                    f"{m.eta_diff_pct:.2f}",
+                    f"{m.distance_diff_pct:.2f}",
+                    f"{m.vmg_diff_kt:.3f}",
+                    f"{m.max_wind_diff_kt:.2f}",
+                    m.decision_divergence,
+                    f"{m.initial_bearing_diff_deg:.1f}",
+                    f"{m.geographic_divergence_nm:.1f}",
+                ]
+            )

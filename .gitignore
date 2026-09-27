@@ -91,3 +91,7 @@ site/
 *.js
 *.min.js
 *.min.css
+
+# Goal 1 prototype artifacts
+data/cache/
+examples/output/
