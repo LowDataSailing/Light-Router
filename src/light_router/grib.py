@@ -15,11 +15,17 @@ from .dataset import to_cf_dataset
 from .weather import WeatherGrid
 
 
-def load_grib_wind(paths: list[Path] | Path) -> xr.Dataset:
+def load_grib_wind(
+    paths: list[Path] | Path,
+    extent: tuple[float, float, float, float] | None = None,
+) -> xr.Dataset:
     """Load U10/V10 from one or more GFS GRIB2 files into a CF Dataset.
 
     Multiple files (one per forecast hour) are merged on the time axis.
-    Requires the optional `grib` dependency group (cfgrib).
+    ``extent`` = (lon_min, lon_max, lat_min, lat_max) crops each file to a
+    subregion before merging (archive files are global; the crop must not
+    cross the antimeridian). Requires the optional `grib` dependency group
+    (cfgrib).
     """
     try:
         import cfgrib  # noqa: F401
@@ -41,9 +47,14 @@ def load_grib_wind(paths: list[Path] | Path) -> xr.Dataset:
                 "filter_by_keys": {"typeOfLevel": "heightAboveGround", "level": 10}
             },
         )
+        if extent is not None:
+            ds = _subset_extent(ds, extent)
+        if "time" not in ds["u10"].dims:
+            # single-step files carry time as a scalar coordinate
+            ds = ds.expand_dims("time")
         u = np.asarray(ds["u10"].values, dtype=np.float32)
         v = np.asarray(ds["v10"].values, dtype=np.float32)
-        times = _hours_since_first(ds["time"].values)
+        times = _forecast_hours(ds)
         grids.append(
             WeatherGrid(
                 times=times,
@@ -57,10 +68,33 @@ def load_grib_wind(paths: list[Path] | Path) -> xr.Dataset:
     return to_cf_dataset(_merge(grids))
 
 
-def _hours_since_first(time_values: np.ndarray) -> np.ndarray:
-    """Convert numpy datetime64 values to hours since the first step."""
-    t = np.asarray(time_values).astype("datetime64[ns]").astype(np.int64) / 3.6e12
-    return t - t[0]
+def _subset_extent(
+    ds: xr.Dataset, extent: tuple[float, float, float, float]
+) -> xr.Dataset:
+    """Crop to (lon_min, lon_max, lat_min, lat_max), normalizing longitude.
+
+    GFS archive files are global with longitude 0..359.75 and descending
+    latitude; convert longitude to [-180, 180), sort both axes ascending,
+    then slice. The extent must not cross the antimeridian.
+    """
+    lon_min, lon_max, lat_min, lat_max = extent
+    ds = ds.assign_coords(longitude=((ds["longitude"] + 180.0) % 360.0) - 180.0)
+    ds = ds.sortby("latitude").sortby("longitude")
+    return ds.sel(
+        latitude=slice(lat_min, lat_max),
+        longitude=slice(lon_min, lon_max),
+    )
+
+
+def _forecast_hours(ds: xr.Dataset) -> np.ndarray:
+    """Forecast lead time of each step, in hours since initialization.
+
+    Per-hour files each carry one step; the lead time (cfgrib's ``step``,
+    valid_time minus initialization) — not hours since the file's own first
+    step — is what places them on the merged time axis.
+    """
+    step = np.atleast_1d(np.asarray(ds["step"].values).astype("timedelta64[ns]"))
+    return step.astype(np.int64) / 3.6e12
 
 
 def _merge(grids: list[WeatherGrid]) -> WeatherGrid:

@@ -96,4 +96,7 @@ site/
 # Goal 1 prototype artifacts
 data/cache/
 examples/output/
-runs/
+runs/*
+# committed real-data review run (PR #3)
+!runs/gfs_canaries_cv/
+!runs/gfs_canaries_cv/**

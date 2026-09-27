@@ -173,7 +173,12 @@ Same inputs produce the same artifact content (Decision #18).
 
 ### 8. Data clients (`data/gfs.py`, `data/chom.py`)
 
-- `gfs.py`: NOMADS grib-filter URL builder + downloader for U10/V10 subsets.
+- `gfs.py`: NOMADS grib-filter URL builder + downloader for U10/V10 subsets
+  (recent runs only — NOMADS serves ~14 days).
+- `gfs_archive.py`: historical GFS from the NOAA Open Data S3 bucket
+  (`noaa-gfs-bdp-pds`) via wgrib2-index range requests — only the UGRD/VGRD
+  10 m messages are fetched (~2 MB per forecast hour instead of ~1 GB).
+  Required for any scenario older than ~14 days (rule 4).
 - `chom.py`: minimal client for the open InfoClimat/CHOM climatology API
   (station search, station-parameter availability). No key required.
 

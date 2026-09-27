@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from light_router.artifacts import new_run_dir, write_artifacts  # noqa: E402
 from light_router.data.gfs import download_gfs_wind  # noqa: E402
+from light_router.data.gfs_archive import download_gfs_archive_wind  # noqa: E402
 from light_router.dataset import dataset_extent, to_cf_dataset  # noqa: E402
 from light_router.grib import load_grib_wind  # noqa: E402
 from light_router.isochrone import RouterConfig  # noqa: E402
@@ -66,20 +67,29 @@ def synthetic_weather() -> xr.Dataset:
     return to_cf_dataset(add_storm(field))
 
 
-def gfs_weather(rundate: str, run_hour: str) -> xr.Dataset:
-    """Download GFS wind for the route box and load it as a CF Dataset."""
+def gfs_weather(rundate: str, run_hour: str, archive: bool) -> xr.Dataset:
+    """Download GFS wind for the route box and load it as a CF Dataset.
+
+    ``archive`` fetches from the NOAA AWS historical archive (range-request
+    wind messages only) instead of NOMADS — required for runs older than
+    ~14 days.
+    """
     lon_min, lon_max, lat_min, lat_max = route_grid_box(START, FINISH, margin_deg=4.0)
-    paths = download_gfs_wind(
-        rundate=rundate,
-        run_hour=run_hour,
-        forecast_hours=list(range(0, 121, 3)),
-        lon_min=lon_min,
-        lon_max=lon_max,
-        lat_min=lat_min,
-        lat_max=lat_max,
-        cache_dir=CACHE,
-    )
-    return load_grib_wind(paths)
+    forecast_hours = list(range(0, 121, 3))
+    if archive:
+        paths = download_gfs_archive_wind(rundate, run_hour, forecast_hours, CACHE)
+    else:
+        paths = download_gfs_wind(
+            rundate=rundate,
+            run_hour=run_hour,
+            forecast_hours=forecast_hours,
+            lon_min=lon_min,
+            lon_max=lon_max,
+            lat_min=lat_min,
+            lat_max=lat_max,
+            cache_dir=CACHE,
+        )
+    return load_grib_wind(paths, extent=(lon_min, lon_max, lat_min, lat_max))
 
 
 def main() -> int:
@@ -87,6 +97,12 @@ def main() -> int:
     parser.add_argument("--source", choices=["synthetic", "gfs"], default="synthetic")
     parser.add_argument("--rundate", default="20260926")
     parser.add_argument("--run-hour", default="00")
+    parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="fetch from the NOAA AWS historical archive instead of NOMADS "
+        "(needed for runs older than ~14 days)",
+    )
     parser.add_argument(
         "--artifacts",
         action="store_true",
@@ -97,7 +113,7 @@ def main() -> int:
     weather = (
         synthetic_weather()
         if args.source == "synthetic"
-        else gfs_weather(args.rundate, args.run_hour)
+        else gfs_weather(args.rundate, args.run_hour, args.archive)
     )
     lon_min, lon_max, lat_min, lat_max = dataset_extent(weather)
     print(
@@ -143,6 +159,7 @@ def main() -> int:
                 "type": args.source,
                 "rundate": args.rundate,
                 "run_hour": args.run_hour,
+                "archive": args.archive,
             },
         )
         print(f"artifacts written to {run_dir}")
