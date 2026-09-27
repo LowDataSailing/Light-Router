@@ -14,11 +14,13 @@ def great_circle_distance(
     lon2: np.ndarray | float,
 ) -> np.ndarray | float:
     """Great-circle distance in nautical miles (haversine)."""
-    phi1, lam1 = np.radians(np.asarray(lat1, dtype=float)), np.radians(
-        np.asarray(lon1, dtype=float)
+    phi1, lam1 = (
+        np.radians(np.asarray(lat1, dtype=float)),
+        np.radians(np.asarray(lon1, dtype=float)),
     )
-    phi2, lam2 = np.radians(np.asarray(lat2, dtype=float)), np.radians(
-        np.asarray(lon2, dtype=float)
+    phi2, lam2 = (
+        np.radians(np.asarray(lat2, dtype=float)),
+        np.radians(np.asarray(lon2, dtype=float)),
     )
     dphi = phi2 - phi1
     dlam = lam2 - lam1
@@ -33,11 +35,13 @@ def initial_bearing(
     lon2: np.ndarray | float,
 ) -> np.ndarray | float:
     """Initial great-circle bearing from point 1 to point 2, degrees [0, 360)."""
-    phi1, lam1 = np.radians(np.asarray(lat1, dtype=float)), np.radians(
-        np.asarray(lon1, dtype=float)
+    phi1, lam1 = (
+        np.radians(np.asarray(lat1, dtype=float)),
+        np.radians(np.asarray(lon1, dtype=float)),
     )
-    phi2, lam2 = np.radians(np.asarray(lat2, dtype=float)), np.radians(
-        np.asarray(lon2, dtype=float)
+    phi2, lam2 = (
+        np.radians(np.asarray(lat2, dtype=float)),
+        np.radians(np.asarray(lon2, dtype=float)),
     )
     dlam = lam2 - lam1
     y = np.sin(dlam) * np.cos(phi2)
@@ -53,8 +57,9 @@ def destination(
     distance_nm: np.ndarray | float,
 ) -> tuple[np.ndarray | float, np.ndarray | float]:
     """Destination point given start, initial bearing (deg) and distance (nm)."""
-    phi1, lam1 = np.radians(np.asarray(lat, dtype=float)), np.radians(
-        np.asarray(lon, dtype=float)
+    phi1, lam1 = (
+        np.radians(np.asarray(lat, dtype=float)),
+        np.radians(np.asarray(lon, dtype=float)),
     )
     theta = np.radians(np.asarray(bearing_deg, dtype=float))
     d = np.asarray(distance_nm, dtype=float) / EARTH_RADIUS_NM

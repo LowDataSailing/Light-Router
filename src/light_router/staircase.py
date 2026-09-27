@@ -86,7 +86,9 @@ def _run_level(
     label = (
         "unlimited"
         if budget is None
-        else f"{budget // 1000} KB" if budget >= 1000 else f"{budget} B"
+        else f"{budget // 1000} KB"
+        if budget >= 1000
+        else f"{budget} B"
     )
     return StaircaseRow(
         budget=label,
