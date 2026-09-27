@@ -1,3 +1,5 @@
+import csv
+
 import numpy as np
 import pytest
 
@@ -43,3 +45,33 @@ def test_synthetic_polar_shape():
     assert max(speeds) == speeds[2]
     # hull-speed plateau: 20 kt wind does not double the 10 kt speed
     assert table.boat_speed(20.0, 120.0) < 2.0 * table.boat_speed(10.0, 120.0)
+
+
+def test_polar_csv_roundtrip(tmp_path):
+    table = synthetic_cruising_polar()
+    path = tmp_path / "polar.csv"
+    table.to_polar_csv(path)
+    loaded = PolarTable.from_polar_csv(path)
+    assert np.allclose(loaded.tws, table.tws)
+    assert np.allclose(loaded.twa, table.twa)
+    assert np.allclose(loaded.speed, table.speed)
+    assert loaded.boat_speed(15.0, 120.0) == pytest.approx(
+        table.boat_speed(15.0, 120.0)
+    )
+
+
+def test_polar_csv_layout(tmp_path):
+    path = tmp_path / "polar.csv"
+    synthetic_cruising_polar().to_polar_csv(path)
+    rows = list(csv.reader(path.read_text().splitlines()))
+    # first row: header cell + TWS values
+    assert len(rows[0]) == len(rows[1])
+    # first column of data rows: TWA values
+    assert float(rows[1][0]) == 0.0
+
+
+def test_polar_csv_rejects_too_small(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text("only,one,row\n")
+    with pytest.raises(ValueError, match="too small"):
+        PolarTable.from_polar_csv(path)

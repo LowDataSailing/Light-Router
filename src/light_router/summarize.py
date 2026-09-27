@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 from .artifacts import MANIFEST_NAME, METRICS_NAME, WIND_SNAPSHOT_NAME
 from .export import read_routes
@@ -21,7 +22,6 @@ from .isochrone import Route
 from .plots import plot_degradation, plot_size_fidelity, plot_tracks
 from .staircase import StaircaseRow
 from .metrics import RouteMetrics
-from .weather import WeatherGrid
 
 
 def _empty_route() -> Route:
@@ -103,7 +103,8 @@ def _routes_from_gpx(run_dir: Path) -> dict[str, Route]:
     return routes
 
 
-def _wind_snapshot(run_dir: Path) -> WeatherGrid | None:
+def _wind_snapshot(run_dir: Path) -> xr.Dataset | None:
+    """Rebuild a single-step CF Dataset from the t=0 wind snapshot."""
     path = run_dir / WIND_SNAPSHOT_NAME
     if not path.exists():
         return None
@@ -113,8 +114,17 @@ def _wind_snapshot(run_dir: Path) -> WeatherGrid | None:
             for name in snap.files
             if name not in ("lats", "lons")
         }
-        return WeatherGrid(
-            times=np.zeros(1), lats=snap["lats"], lons=snap["lons"], data=data
+        coords = {
+            "time": ("time", np.zeros(1)),
+            "latitude": ("latitude", snap["lats"]),
+            "longitude": ("longitude", snap["lons"]),
+        }
+        return xr.Dataset(
+            data_vars={
+                name: (("time", "latitude", "longitude"), values)
+                for name, values in data.items()
+            },
+            coords=coords,
         )
 
 

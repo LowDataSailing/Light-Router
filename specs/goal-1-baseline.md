@@ -11,19 +11,33 @@ This file is the working spec for this PR; the user-facing docs site is unchange
 
 Per `compatibility-principles.md` (binding on every PR), this prototype honors:
 
-- **Rule 2 (Router protocol):** `IsochroneRouter.route(start, finish, start_time)
-  -> Route` matches the protocol signature, so the oracle subprocess can replace
-  it without touching the harness. The in-repo isochrone is the *provisional
-  surrogate* (Decision #15); it is labeled as such until validated against the
-  industry oracle.
+- **Rule 1 (CF xarray canonical):** the in-memory weather representation is a
+  CF-compliant xarray Dataset (dims time/latitude/longitude, variables
+  u10/v10, time = hours since forecast initialization). Loaders
+  (`grib.load_grib_wind`) produce it, the harness and routers consume it
+  (`dataset.to_cf_dataset` / `grid_from_dataset`). `WeatherGrid` is the
+  transitional internal numpy view used by the isochrone engine; it does not
+  appear in any public interface.
+- **Rule 2 (Router protocol):** routers implement the runtime-checkable
+  `Router` protocol (`route(start, finish, start_time) -> Route`). The
+  harness takes a router factory `Callable[[xr.Dataset], Router]`
+  (`staircase.run_staircase`, `scenario.surrogate_router_factory`), so the
+  oracle subprocess can replace the in-repo router without touching the
+  harness. The in-repo isochrone is the *provisional surrogate* (Decision
+  #15); it is labeled as such until validated against the industry oracle.
+- **Rule 3 (Gymnasium semantics):** the experiment unit is the `Scenario`
+  (weather + endpoints + staircase) = one episode; `reset` = scenario
+  construction, `step` = one budget level, observation = the degraded
+  package, reward = `RouteMetrics` vs the reference. No env loop yet (first
+  iterations are supervised); the naming is fixed so the Gymnasium adapter
+  is a thin wrapper.
 - **Rule 4 (real data):** reported staircase results run on real GFS forecasts
   (`data/gfs.py`); the synthetic fields are unit-test fixtures and offline demo
   fallback only.
-- **Rule 5 (polar format):** `PolarTable` loads from a table so an
-  OpenCPN-compatible polar file can replace the synthetic fixture (Decision #12)
-  without touching the router.
-- Rules 1 (CF xarray) and 3 (Gymnasium semantics) land with the scenario-package
-  and dataset work (Goal 2); `WeatherGrid` is the documented transitional view.
+- **Rule 5 (polar format):** `PolarTable.from_polar_csv` /
+  `to_polar_csv` read and write the OpenCPN-compatible polar CSV (first row =
+  TWS, first column = TWA, cells = boat speed), so a real polar file can
+  replace the synthetic fixture (Decision #12) without touching the router.
 
 ## Objective
 
@@ -61,11 +75,15 @@ Research question: *How much weather information does a sailing router actually 
 
 ### 1. Weather grid (`weather.py`, `grib.py`, `synthetic.py`)
 
-- `WeatherGrid`: time axis (hours since start), lat/lon axes, variables
-  (`u10`, `v10`, optional `msl`...). Bilinear spatial + linear temporal
-  interpolation, vectorized. Wind magnitude/direction helpers.
+- `WeatherGrid`: the internal numpy view — time axis (hours since start),
+  lat/lon axes, variables (`u10`, `v10`, optional `msl`...). Bilinear spatial
+  + linear temporal interpolation, vectorized. Wind magnitude/direction
+  helpers. Public interfaces speak the canonical CF Dataset
+  (`dataset.py`: `to_cf_dataset` / `grid_from_dataset`); `WeatherGrid` is
+  not exported.
 - `grib.py`: load GRIB2 through cfgrib/xarray (optional dependency group
-  `grib`; lazy import with a clear error message).
+  `grib`; lazy import with a clear error message) and return the canonical
+  CF Dataset.
 - `synthetic.py`: deterministic synthetic trade-wind field for tests and offline
   demo fallback, plus `add_storm()` — a compact, time-pulsing storm overlay
   placed on the direct route. Smooth uniform fields degrade for free (they
@@ -80,6 +98,10 @@ Research question: *How much weather information does a sailing router actually 
   monohull (documented as such).
 
 ### 3. Isochrone router (`isochrone.py`)
+
+- Implements the `Router` protocol (`route(start, finish, start_time) ->
+  Route`, runtime-checkable); `IsochroneRouter.from_dataset(weather, polar,
+  config)` binds a CF Dataset. The provisional surrogate (Decision #15).
 
 - Time-stepped isochrone expansion: from each reachable point at time t,
   candidate headings, polar speed at the local interpolated wind, move
@@ -106,7 +128,12 @@ array packed at b bits per value — not an upcast intermediate — so the bits
 dimension genuinely moves the measured size. `degrade()` and
 `package_size()` share one quantization helper and cannot diverge.
 
-### 5. Budget staircase + metrics (`staircase.py`, `metrics.py`)
+### 5. Budget staircase + metrics (`staircase.py`, `metrics.py`, `scenario.py`)
+
+- `run_staircase(weather: xr.Dataset, router_factory, start, finish,
+  staircase)` — the harness speaks the CF Dataset and the Router protocol
+  through a factory `Callable[[xr.Dataset], Router]`; `Scenario.run` wraps it
+  as one episode (Gymnasium semantics, rule 3).
 
 - Staircase: Unlimited -> 1 MB -> 500 KB -> 250 KB -> 100 KB -> 50 KB ->
   25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB.

@@ -39,6 +39,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24.0",
+    "xarray>=2023.0.0",
 ]
 
 [project.urls]
@@ -61,7 +62,6 @@ docs = [
 ]
 grib = [
     "cfgrib>=0.9.10.4",
-    "xarray>=2023.0.0",
 ]
 artifacts = [
     "gpxpy>=1.6",

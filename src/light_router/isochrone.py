@@ -11,8 +11,10 @@ No land avoidance, no currents — Level 1 per the Baseline System spec.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 import numpy as np
+import xarray as xr
 
 from .geo import destination, great_circle_distance
 from .polar import PolarTable
@@ -63,11 +65,53 @@ class RouterConfig:
     min_speed_kt: float = 0.1  # below this a candidate cannot sail
 
 
+@runtime_checkable
+class Router(Protocol):
+    """The routing interface every router implements (Compatibility rule 2).
+
+    ``route(start, finish, start_time) -> Route`` is the entire contract: the
+    Level 1 oracle must be replaceable by an external reference router (a
+    pinned subprocess adapter) without changing the harness. A router is
+    bound to its weather at construction — see the router factory in
+    ``staircase.run_staircase``.
+    """
+
+    def route(
+        self,
+        start: tuple[float, float],
+        finish: tuple[float, float],
+        start_time: float = 0.0,
+    ) -> Route: ...
+
+
 @dataclass
 class IsochroneRouter:
+    """The provisional in-process surrogate oracle.
+
+    Fast numpy isochrone engine used inside harness loops; validated against
+    the industry reference router before any reported result depends on it
+    (Decision #15). Not the oracle itself.
+    """
+
     grid: WeatherGrid
     polar: PolarTable
     config: RouterConfig = field(default_factory=RouterConfig)
+
+    @classmethod
+    def from_dataset(
+        cls,
+        weather: xr.Dataset,
+        polar: PolarTable,
+        config: RouterConfig | None = None,
+    ) -> IsochroneRouter:
+        """Build the router from the canonical CF weather Dataset."""
+        from .dataset import grid_from_dataset
+
+        return cls(
+            grid=grid_from_dataset(weather),
+            polar=polar,
+            config=config if config is not None else RouterConfig(),
+        )
 
     def route(
         self,

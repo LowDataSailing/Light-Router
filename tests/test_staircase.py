@@ -1,9 +1,11 @@
 import numpy as np
 import pytest
 
-from light_router.isochrone import IsochroneRouter, RouterConfig
+from light_router.dataset import to_cf_dataset
+from light_router.isochrone import RouterConfig
 from light_router.metrics import compare_routes
 from light_router.polar import synthetic_cruising_polar
+from light_router.scenario import surrogate_router_factory
 from light_router.staircase import STAIRCASE, run_staircase, write_csv
 from light_router.synthetic import add_storm, trade_wind_field
 
@@ -11,7 +13,7 @@ START = (28.0, -15.5)
 FINISH = (16.75, -22.9)
 
 
-def make_router(grid):
+def make_factory():
     config = RouterConfig(
         dt_hours=2.0,
         n_headings=24,
@@ -20,7 +22,7 @@ def make_router(grid):
         finish_radius_nm=30.0,
         max_hours=200.0,
     )
-    return IsochroneRouter(grid=grid, polar=synthetic_cruising_polar(), config=config)
+    return surrogate_router_factory(synthetic_cruising_polar(), config)
 
 
 @pytest.fixture
@@ -45,9 +47,13 @@ def grid():
     return add_storm(field)
 
 
-def test_staircase_runs_all_levels(grid):
-    router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH).rows
+@pytest.fixture
+def weather(grid):
+    return to_cf_dataset(grid)
+
+
+def test_staircase_runs_all_levels(weather):
+    rows = run_staircase(weather, make_factory(), START, FINISH).rows
     assert len(rows) == len(STAIRCASE)
     # unlimited row has full fidelity
     assert rows[0].spatial_stride == 1 and rows[0].bits == 32
@@ -57,18 +63,16 @@ def test_staircase_runs_all_levels(grid):
             assert row.package_bytes <= row.budget_bytes
 
 
-def test_unlimited_row_matches_reference(grid):
-    router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH).rows
+def test_unlimited_row_matches_reference(weather):
+    rows = run_staircase(weather, make_factory(), START, FINISH).rows
     first = rows[0]
     assert first.metrics.eta_diff_pct == pytest.approx(0.0, abs=1e-6)
     assert first.metrics.distance_diff_pct == pytest.approx(0.0, abs=1e-6)
     assert not first.metrics.decision_divergence
 
 
-def test_degradation_grows_as_budget_shrinks(grid):
-    router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH).rows
+def test_degradation_grows_as_budget_shrinks(weather):
+    rows = run_staircase(weather, make_factory(), START, FINISH).rows
     # the 1 KB row must be strictly worse than the unlimited row on at least
     # one reported metric (ETA or geographic divergence)
     worst = rows[-1]
@@ -81,9 +85,8 @@ def test_degradation_grows_as_budget_shrinks(grid):
     assert worse
 
 
-def test_write_csv(tmp_path, grid):
-    router = make_router(grid)
-    rows = run_staircase(grid, router, START, FINISH).rows
+def test_write_csv(tmp_path, weather):
+    rows = run_staircase(weather, make_factory(), START, FINISH).rows
     out = tmp_path / "curve.csv"
     write_csv(rows, out)
     content = out.read_text().splitlines()
@@ -92,9 +95,8 @@ def test_write_csv(tmp_path, grid):
     assert "unlimited" in content[1]
 
 
-def test_compare_routes_identity(grid):
-    router = make_router(grid)
-    route = router.route(START, FINISH)
+def test_compare_routes_identity(weather):
+    route = make_factory()(weather).route(START, FINISH)
     metrics = compare_routes(route, route, FINISH)
     assert metrics.eta_diff_pct == pytest.approx(0.0)
     assert metrics.distance_diff_pct == pytest.approx(0.0)

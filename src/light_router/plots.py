@@ -13,10 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 from .isochrone import Route
 from .staircase import StaircaseResult
-from .weather import WeatherGrid
 
 
 def _require_pyplot():
@@ -36,17 +36,20 @@ def _require_pyplot():
 def plot_tracks(
     out_path: Path,
     tracks: dict[str, Route],
-    grid: WeatherGrid | None = None,
+    weather: xr.Dataset | None = None,
     title: str = "Routes by budget",
 ) -> None:
     """Chart (a): tracks color-coded by budget on a wind-field underlay."""
     plt = _require_pyplot()
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    if grid is not None and "u10" in grid.data and "v10" in grid.data:
-        u, v = grid.data["u10"][0], grid.data["v10"][0]
+    if weather is not None and "u10" in weather and "v10" in weather:
+        u = weather["u10"].isel(time=0).values
+        v = weather["v10"].isel(time=0).values
         speed = np.hypot(u, v)
-        lon2d, lat2d = np.meshgrid(grid.lons, grid.lats)
+        lon2d, lat2d = np.meshgrid(
+            weather["longitude"].values, weather["latitude"].values
+        )
         stride = max(1, max(speed.shape) // 30)
         contour = ax.contourf(lon2d, lat2d, speed, levels=15, cmap="Blues", alpha=0.6)
         fig.colorbar(contour, ax=ax, label="wind speed (m/s), t=0")
@@ -149,10 +152,10 @@ def plot_size_fidelity(out_path: Path, result: StaircaseResult) -> None:
     plt.close(fig)
 
 
-def write_plots(run_dir: Path, result: StaircaseResult, grid: WeatherGrid) -> None:
+def write_plots(run_dir: Path, result: StaircaseResult, weather: xr.Dataset) -> None:
     """Write the three charts into the run directory."""
     tracks: dict[str, Route] = {"reference": result.reference}
     tracks.update({row.budget: row.route for row in result.rows})
-    plot_tracks(run_dir / "plot_tracks.png", tracks, grid)
+    plot_tracks(run_dir / "plot_tracks.png", tracks, weather)
     plot_degradation(run_dir / "plot_degradation.png", result)
     plot_size_fidelity(run_dir / "plot_size_fidelity.png", result)

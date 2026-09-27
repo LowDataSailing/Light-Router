@@ -20,8 +20,10 @@ from light_router.artifacts import (
     new_run_dir,
     write_artifacts,
 )
-from light_router.isochrone import IsochroneRouter, RouterConfig
+from light_router.dataset import to_cf_dataset
+from light_router.isochrone import RouterConfig
 from light_router.polar import synthetic_cruising_polar
+from light_router.scenario import surrogate_router_factory
 from light_router.staircase import run_staircase
 from light_router.synthetic import add_storm, trade_wind_field
 
@@ -48,10 +50,10 @@ def make_grid():
 @pytest.fixture(scope="module")
 def result():
     grid = make_grid()
-    router = IsochroneRouter(
-        grid=grid,
-        polar=synthetic_cruising_polar(),
-        config=RouterConfig(
+    weather = to_cf_dataset(grid)
+    factory = surrogate_router_factory(
+        synthetic_cruising_polar(),
+        RouterConfig(
             dt_hours=4.0,
             n_headings=18,
             bin_deg=2.0,
@@ -60,22 +62,29 @@ def result():
             max_hours=250.0,
         ),
     )
-    return grid, router, run_staircase(grid, router, START, FINISH, STAIRCASE)
+    return weather, factory, run_staircase(weather, factory, START, FINISH, STAIRCASE)
 
 
 @pytest.fixture(scope="module")
 def run_dir(result, tmp_path_factory):
-    grid, router, staircase = result
+    weather, factory, staircase = result
     base = tmp_path_factory.mktemp("runs")
     run_dir = new_run_dir(base, "synthetic_canaries_cv")
     write_artifacts(
         run_dir,
         staircase,
-        grid,
+        weather,
         scenario="synthetic_canaries_cv",
         start=START,
         finish=FINISH,
-        router_config=router.config,
+        router_config=RouterConfig(
+            dt_hours=4.0,
+            n_headings=18,
+            bin_deg=2.0,
+            max_points=400,
+            finish_radius_nm=40.0,
+            max_hours=250.0,
+        ),
         staircase=STAIRCASE,
         source={"type": "synthetic"},
     )
@@ -91,11 +100,11 @@ def test_git_sha_short():
 
 
 def test_grid_checksum_deterministic(result):
-    grid = result[0]
-    assert grid_checksum(grid) == grid_checksum(grid)
-    other = make_grid()
-    other.data["u10"] = other.data["u10"] + 0.1
-    assert grid_checksum(grid) != grid_checksum(other)
+    weather = result[0]
+    assert grid_checksum(weather) == grid_checksum(weather)
+    other = to_cf_dataset(make_grid())
+    other["u10"] = other["u10"] + 0.1
+    assert grid_checksum(weather) != grid_checksum(other)
 
 
 def test_new_run_dir_layout(tmp_path):
@@ -107,7 +116,7 @@ def test_new_run_dir_layout(tmp_path):
 
 
 def test_run_dir_contents(run_dir, result):
-    grid, router, staircase = result
+    staircase = result[2]
     names = {p.name for p in run_dir.iterdir()}
     assert MANIFEST_NAME in names
     assert METRICS_NAME in names

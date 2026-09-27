@@ -7,6 +7,11 @@ Usage:
 Scenario: open-ocean trade wind, Canary Islands -> Cape Verde (no land
 avoidance, single planning-time forecast — see specs/goal-1-baseline.md).
 
+Weather flows through the canonical CF xarray Dataset (Compatibility rule
+1) and routing goes through a Router factory (rule 2): the in-repo
+isochrone surrogate below is swappable for an external oracle without
+touching this script.
+
 Outputs examples/output/degradation_curve.csv and prints a summary table.
 With --artifacts, also writes a run directory runs/<scenario>/<ts>-<sha>/
 (manifest, GPX/GeoJSON routes, metrics.csv, plots) — see
@@ -20,22 +25,20 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from light_router.artifacts import write_artifacts  # noqa: E402
+from light_router.artifacts import new_run_dir, write_artifacts  # noqa: E402
 from light_router.data.gfs import download_gfs_wind  # noqa: E402
+from light_router.dataset import dataset_extent, to_cf_dataset  # noqa: E402
 from light_router.grib import load_grib_wind  # noqa: E402
-from light_router.isochrone import IsochroneRouter, RouterConfig  # noqa: E402
+from light_router.isochrone import RouterConfig  # noqa: E402
 from light_router.polar import synthetic_cruising_polar  # noqa: E402
-from light_router.staircase import (  # noqa: E402
-    STAIRCASE,
-    format_summary,
-    run_staircase,
-    write_csv,
-)
+from light_router.scenario import Scenario, surrogate_router_factory  # noqa: E402
+from light_router.staircase import STAIRCASE, format_summary, write_csv  # noqa: E402
 from light_router.synthetic import add_storm, trade_wind_field  # noqa: E402
-from light_router.weather import WeatherGrid, route_grid_box  # noqa: E402
+from light_router.weather import route_grid_box  # noqa: E402
 
 START = (28.0, -15.5)  # Canary Islands
 FINISH = (16.75, -22.9)  # Sal, Cape Verde
@@ -44,7 +47,8 @@ OUTPUT = Path(__file__).resolve().parents[1] / "examples" / "output"
 RUNS = Path(__file__).resolve().parents[1] / "runs"
 
 
-def synthetic_grid() -> WeatherGrid:
+def synthetic_weather() -> xr.Dataset:
+    """Build the synthetic scenario weather as a canonical CF Dataset."""
     lats = np.arange(12.0, 32.01, 0.25)
     lons = np.arange(-26.0, -12.99, 0.25)
     times = np.arange(0.0, 121.0, 3.0)
@@ -59,10 +63,11 @@ def synthetic_grid() -> WeatherGrid:
     modulation = (factor[:, None] * wave)[None, :, :]
     for name in ("u10", "v10"):
         field.data[name] = (field.data[name] * modulation).astype(np.float32)
-    return add_storm(field)
+    return to_cf_dataset(add_storm(field))
 
 
-def gfs_grid(rundate: str, run_hour: str) -> WeatherGrid:
+def gfs_weather(rundate: str, run_hour: str) -> xr.Dataset:
+    """Download GFS wind for the route box and load it as a CF Dataset."""
     lon_min, lon_max, lat_min, lat_max = route_grid_box(START, FINISH, margin_deg=4.0)
     paths = download_gfs_wind(
         rundate=rundate,
@@ -89,30 +94,32 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    grid = (
-        synthetic_grid()
+    weather = (
+        synthetic_weather()
         if args.source == "synthetic"
-        else gfs_grid(args.rundate, args.run_hour)
+        else gfs_weather(args.rundate, args.run_hour)
     )
+    lon_min, lon_max, lat_min, lat_max = dataset_extent(weather)
     print(
-        f"weather grid: {len(grid.times)} steps, {len(grid.lats)}x{len(grid.lons)} "
-        f"({grid.grid_extent()[0]:.1f}E..{grid.grid_extent()[1]:.1f}E, "
-        f"{grid.grid_extent()[2]:.1f}N..{grid.grid_extent()[3]:.1f}N)"
+        f"weather dataset: {weather.sizes['time']} steps, "
+        f"{weather.sizes['latitude']}x{weather.sizes['longitude']} "
+        f"({lon_min:.1f}E..{lon_max:.1f}E, {lat_min:.1f}N..{lat_max:.1f}N)"
     )
 
-    router = IsochroneRouter(
-        grid=grid,
-        polar=synthetic_cruising_polar(),
-        config=RouterConfig(
-            dt_hours=1.0,
-            n_headings=36,
-            bin_deg=0.5,
-            max_points=1200,
-            finish_radius_nm=25.0,
-            max_hours=150.0,
-        ),
+    scenario = Scenario(weather=weather, start=START, finish=FINISH)
+    router_config = RouterConfig(
+        dt_hours=1.0,
+        n_headings=36,
+        bin_deg=0.5,
+        max_points=1200,
+        finish_radius_nm=25.0,
+        max_hours=150.0,
     )
-    result = run_staircase(grid, router, START, FINISH)
+    factory = surrogate_router_factory(
+        polar=synthetic_cruising_polar(),
+        config=router_config,
+    )
+    result = scenario.run(factory)
     rows = result.rows
 
     out = OUTPUT / "degradation_curve.csv"
@@ -122,17 +129,15 @@ def main() -> int:
     print(f"\nCSV written to {out}")
 
     if args.artifacts:
-        from light_router.artifacts import new_run_dir
-
         run_dir = new_run_dir(RUNS, scenario=f"{args.source}_canaries_cv")
         write_artifacts(
             run_dir,
             result,
-            grid,
+            scenario.weather,
             scenario=f"{args.source}_canaries_cv",
             start=START,
             finish=FINISH,
-            router_config=router.config,
+            router_config=router_config,
             staircase=STAIRCASE,
             source={
                 "type": args.source,

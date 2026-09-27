@@ -3,6 +3,11 @@
 For each budget level, pick the highest-fidelity degradation configuration
 that fits, re-route on the degraded weather, and measure route-quality
 degradation against the Level 1 full-information reference route.
+
+The harness speaks the canonical CF xarray Dataset (Compatibility rule 1)
+and the Router protocol through a router factory (Compatibility rule 2):
+``router_factory(weather_dataset) -> Router``. The in-repo isochrone and an
+external oracle subprocess are interchangeable here.
 """
 
 from __future__ import annotations
@@ -10,11 +15,17 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
+
+import xarray as xr
 
 from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
-from .isochrone import IsochroneRouter, Route
+from .dataset import grid_from_dataset, to_cf_dataset
+from .isochrone import Route, Router
 from .metrics import RouteMetrics, compare_routes
 from .weather import WeatherGrid
+
+RouterFactory = Callable[[xr.Dataset], Router]
 
 STAIRCASE: list[int | None] = [
     None,  # unlimited
@@ -52,15 +63,16 @@ class StaircaseResult:
 
 
 def run_staircase(
-    grid: WeatherGrid,
-    router: IsochroneRouter,
+    weather: xr.Dataset,
+    router_factory: RouterFactory,
     start: tuple[float, float],
     finish: tuple[float, float],
     staircase: list[int | None] | None = None,
 ) -> StaircaseResult:
     """Run the degradation curve experiment. Returns one row per budget."""
     staircase = staircase if staircase is not None else STAIRCASE
-    reference = router.route(start, finish)
+    grid = grid_from_dataset(weather)
+    reference = router_factory(weather).route(start, finish)
     if not reference.reached:
         raise RuntimeError(
             "reference route did not reach the finish; the scenario or the "
@@ -72,14 +84,16 @@ def run_staircase(
         config = best_config_for_budget(grid, budget)
         if config is None:
             continue  # budget unreachable even fully degraded
-        rows.append(_run_level(router, reference, grid, config, budget, start, finish))
+        rows.append(
+            _run_level(grid, router_factory, reference, config, budget, start, finish)
+        )
     return StaircaseResult(rows=rows, reference=reference)
 
 
 def _run_level(
-    router: IsochroneRouter,
-    reference: Route,
     grid: WeatherGrid,
+    router_factory: RouterFactory,
+    reference: Route,
     config: DegradeConfig,
     budget: int | None,
     start: tuple[float, float],
@@ -87,10 +101,7 @@ def _run_level(
 ) -> StaircaseRow:
     degraded_grid = degrade(grid, config)
     size = package_size(grid, config)
-    degraded_router = IsochroneRouter(
-        grid=degraded_grid, polar=router.polar, config=router.config
-    )
-    route = degraded_router.route(start, finish)
+    route = router_factory(to_cf_dataset(degraded_grid)).route(start, finish)
     metrics = compare_routes(reference, route, finish)
     label = (
         "unlimited"

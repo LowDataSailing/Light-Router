@@ -1,22 +1,27 @@
-"""GRIB2 loading through cfgrib/xarray (optional dependency group `grib`)."""
+"""GRIB2 loading through cfgrib (optional dependency group `grib`).
+
+Returns the canonical CF-compliant xarray Dataset (Compatibility rule 1):
+a new data source is a new loader, nothing downstream changes.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
+from .dataset import to_cf_dataset
 from .weather import WeatherGrid
 
 
-def load_grib_wind(paths: list[Path] | Path) -> WeatherGrid:
-    """Load U10/V10 from one or more GFS GRIB2 files into a WeatherGrid.
+def load_grib_wind(paths: list[Path] | Path) -> xr.Dataset:
+    """Load U10/V10 from one or more GFS GRIB2 files into a CF Dataset.
 
     Multiple files (one per forecast hour) are merged on the time axis.
-    Requires the optional `grib` dependency group (cfgrib + xarray).
+    Requires the optional `grib` dependency group (cfgrib).
     """
     try:
-        import xarray  # noqa: F401
         import cfgrib  # noqa: F401
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise ImportError(
@@ -29,7 +34,7 @@ def load_grib_wind(paths: list[Path] | Path) -> WeatherGrid:
 
     grids: list[WeatherGrid] = []
     for path in paths:
-        ds = __import__("xarray").open_dataset(
+        ds = xr.open_dataset(
             path,
             engine="cfgrib",
             backend_kwargs={
@@ -49,7 +54,7 @@ def load_grib_wind(paths: list[Path] | Path) -> WeatherGrid:
         )
         ds.close()
 
-    return _merge(grids)
+    return to_cf_dataset(_merge(grids))
 
 
 def _hours_since_first(time_values: np.ndarray) -> np.ndarray:

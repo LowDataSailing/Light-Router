@@ -1,8 +1,16 @@
-"""Boat polar diagram: boat speed as a function of true wind speed and angle."""
+"""Boat polar diagram: boat speed as a function of true wind speed and angle.
+
+Compatibility rule 5: polars load from industry-standard polar files
+(OpenCPN-compatible CSV — first row = TWS values, first column = TWA
+values, cells = boat speed in knots). The synthetic cruising polar is a
+test fixture, not a research input.
+"""
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -70,6 +78,34 @@ class PolarTable:
             + v11 * ws * wa
         )
         return result if np.ndim(tws) or np.ndim(twa) else float(result)
+
+    @classmethod
+    def from_polar_csv(cls, path: Path | str) -> PolarTable:
+        """Load an OpenCPN-style polar CSV.
+
+        Layout: first row = TWS values (kt), first column = TWA values
+        (deg), cells = boat speed (kt). The top-left cell is ignored.
+        """
+        with open(path, newline="") as fh:
+            rows = list(csv.reader(fh))
+        if len(rows) < 2 or max(len(r) for r in rows) < 2:
+            raise ValueError(f"polar CSV {path} is too small to be a polar table")
+        tws = np.array([float(x) for x in rows[0][1:] if x.strip() != ""])
+        twa = np.array([float(r[0]) for r in rows[1:] if r and r[0].strip() != ""])
+        # CSV cells are laid out (TWA rows x TWS columns); the table stores
+        # (TWS x TWA), so transpose
+        speed = np.array(
+            [[float(x) for x in r[1 : 1 + len(tws)]] for r in rows[1 : 1 + len(twa)]]
+        ).T
+        return cls(tws=tws, twa=twa, speed=speed)
+
+    def to_polar_csv(self, path: Path | str) -> None:
+        """Write the OpenCPN-style polar CSV (round-trips with from_polar_csv)."""
+        with open(path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["TWA\\TWS"] + [f"{v:g}" for v in self.tws])
+            for j, angle in enumerate(self.twa):
+                writer.writerow([f"{angle:g}"] + [f"{v:g}" for v in self.speed[:, j]])
 
 
 def synthetic_cruising_polar() -> PolarTable:

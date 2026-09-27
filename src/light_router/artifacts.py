@@ -17,10 +17,11 @@ from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
+from .dataset import dataset_extent
 from .isochrone import Route, RouterConfig
 from .staircase import StaircaseResult, write_csv
-from .weather import WeatherGrid
 
 MANIFEST_NAME = "manifest.json"
 METRICS_NAME = "metrics.csv"
@@ -47,14 +48,14 @@ def git_sha() -> str:
         return "unknown"
 
 
-def grid_checksum(grid: WeatherGrid) -> str:
-    """SHA-256 over the grid axes and data — the data provenance fingerprint."""
+def grid_checksum(weather: xr.Dataset) -> str:
+    """SHA-256 over the dataset axes and data — the provenance fingerprint."""
     h = hashlib.sha256()
-    for arr in (grid.times, grid.lats, grid.lons):
-        h.update(np.ascontiguousarray(arr, dtype=float).tobytes())
-    for name in sorted(grid.data):
+    for name in ("time", "latitude", "longitude"):
+        h.update(np.ascontiguousarray(weather[name].values, dtype=float).tobytes())
+    for name in sorted(str(v) for v in weather.data_vars):
         h.update(name.encode())
-        h.update(np.ascontiguousarray(grid.data[name]).tobytes())
+        h.update(np.ascontiguousarray(weather[name].values).tobytes())
     return h.hexdigest()
 
 
@@ -75,7 +76,7 @@ def write_manifest(
     finish: tuple[float, float],
     router_config: RouterConfig,
     staircase: list[int | None],
-    grid: WeatherGrid,
+    weather: xr.Dataset,
     source: dict[str, object],
     code_version: str | None = None,
 ) -> Path:
@@ -87,13 +88,13 @@ def write_manifest(
         "code_version": code_version if code_version is not None else git_sha(),
         "light_router_version": _package_version(),
         "source": source,
-        "data_checksum": grid_checksum(grid),
+        "data_checksum": grid_checksum(weather),
         "grid": {
-            "n_steps": len(grid.times),
-            "n_lat": len(grid.lats),
-            "n_lon": len(grid.lons),
-            "variables": grid.variables,
-            "extent_east_west_south_north": list(grid.grid_extent()),
+            "n_steps": int(weather.sizes["time"]),
+            "n_lat": int(weather.sizes["latitude"]),
+            "n_lon": int(weather.sizes["longitude"]),
+            "variables": sorted(str(v) for v in weather.data_vars),
+            "extent_east_west_south_north": list(dataset_extent(weather)),
         },
         "route": {"start": list(start), "finish": list(finish)},
         "router_config": {
@@ -111,15 +112,19 @@ def write_manifest(
     return path
 
 
-def write_wind_snapshot(run_dir: Path, grid: WeatherGrid) -> Path:
+def write_wind_snapshot(run_dir: Path, weather: xr.Dataset) -> Path:
     """Write the t=0 wind field, so plots can be re-rendered without the grid."""
     path = run_dir / WIND_SNAPSHOT_NAME
-    np.savez(
-        path,
-        lats=grid.lats,
-        lons=grid.lons,
-        **{name: grid.data[name][0] for name in ("u10", "v10") if name in grid.data},
-    )
+    fields = {
+        "lats": weather["latitude"].values,
+        "lons": weather["longitude"].values,
+        **{
+            name: weather[name].isel(time=0).values
+            for name in ("u10", "v10")
+            if name in weather
+        },
+    }
+    np.savez(path, **fields)  # type: ignore[arg-type]  # numpy stub limitation
     return path
 
 
@@ -131,7 +136,7 @@ def budget_slug(budget: str) -> str:
 def write_artifacts(
     run_dir: Path,
     result: StaircaseResult,
-    grid: WeatherGrid,
+    weather: xr.Dataset,
     *,
     scenario: str,
     start: tuple[float, float],
@@ -157,11 +162,11 @@ def write_artifacts(
         finish=finish,
         router_config=router_config,
         staircase=staircase,
-        grid=grid,
+        weather=weather,
         source=source,
     )
     write_csv(result.rows, run_dir / METRICS_NAME)
-    write_wind_snapshot(run_dir, grid)
+    write_wind_snapshot(run_dir, weather)
 
     write_route_files(run_dir, result.reference, "route_reference")
     for row in result.rows:
@@ -170,4 +175,4 @@ def write_artifacts(
         write_route_files(run_dir, route, label)
 
     if plots:
-        write_plots(run_dir, result, grid)
+        write_plots(run_dir, result, weather)
