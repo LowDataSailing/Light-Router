@@ -78,7 +78,9 @@ Thumbs.db
 *.md
 !README.md
 !LICENSE
+!AGENTS.md
 !docs/*.md
+!docs/agents/*.md
 
 # Temporary files
 *.tmp
