@@ -15,7 +15,7 @@ uv sync --all-groups
 
 ## Code Style
 - Follow PEP 8
-- Use Black for formatting (`make format`)
+- Use Ruff for formatting (`make format`)
 - Type hints for all function signatures
 - Google-style docstrings
 
