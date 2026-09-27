@@ -81,6 +81,7 @@ Thumbs.db
 !AGENTS.md
 !docs/*.md
 !docs/agents/*.md
+!specs/*.md
 
 # Temporary files
 *.tmp
