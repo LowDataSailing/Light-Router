@@ -1,11 +1,22 @@
 """Goal 1 demo: the bandwidth-quality degradation curve, end to end.
 
-Usage:
-    uv run python examples/degradation_curve.py --source synthetic
-    uv run python examples/degradation_curve.py --source gfs --rundate 20260926
+Runs on real data by default (Compatibility rule 4): the archived GFS
+0.25-deg forecast of 2025-09-01 00Z, Canary Islands -> Cape Verde — a
+classic trade-wind passage window (18-20 kt N/NE through the whole 120 h
+horizon).
 
-Scenario: open-ocean trade wind, Canary Islands -> Cape Verde (no land
-avoidance, single planning-time forecast — see specs/goal-1-baseline.md).
+Usage:
+    uv run python examples/degradation_curve.py                 # real GFS, archive
+    uv run python examples/degradation_curve.py --artifacts     # + run directory
+    uv run python examples/degradation_curve.py --source synthetic   # offline fallback
+    uv run python examples/degradation_curve.py --rundate 20260926 \
+        --no-archive                                            # recent run, via NOMADS
+
+Real data comes from the NOAA Open Data S3 archive (``--archive``, the
+default): only the UGRD/VGRD 10 m messages are fetched via wgrib2-index
+range requests (~2 MB per forecast hour). NOMADS (``--no-archive``) serves
+only the last ~14 days. GRIB loading needs the ``grib`` dependency group
+and a system ecCodes library (Debian: ``apt install libeccodes0``).
 
 Weather flows through the canonical CF xarray Dataset (Compatibility rule
 1) and routing goes through a Router factory (rule 2): the in-repo
@@ -94,14 +105,15 @@ def gfs_weather(rundate: str, run_hour: str, archive: bool) -> xr.Dataset:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=["synthetic", "gfs"], default="synthetic")
-    parser.add_argument("--rundate", default="20260926")
+    parser.add_argument("--source", choices=["synthetic", "gfs"], default="gfs")
+    parser.add_argument("--rundate", default="20250901")
     parser.add_argument("--run-hour", default="00")
     parser.add_argument(
         "--archive",
-        action="store_true",
-        help="fetch from the NOAA AWS historical archive instead of NOMADS "
-        "(needed for runs older than ~14 days)",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="fetch from the NOAA AWS historical archive (default) instead of "
+        "NOMADS — required for runs older than ~14 days",
     )
     parser.add_argument(
         "--artifacts",

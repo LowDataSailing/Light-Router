@@ -95,7 +95,9 @@ site/
 
 # Goal 1 prototype artifacts
 data/cache/
-examples/output/
+examples/output/*
+# committed real-data example output (PR #3)
+!examples/output/degradation_curve.csv
 runs/*
 # committed real-data review run (PR #3)
 !runs/gfs_canaries_cv/
