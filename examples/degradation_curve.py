@@ -104,6 +104,7 @@ def gfs_weather(rundate: str, run_hour: str, archive: bool) -> xr.Dataset:
 
 
 def main() -> int:
+    """Parse arguments, run the staircase, write CSV (+ optional artifacts)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", choices=["synthetic", "gfs"], default="gfs")
     parser.add_argument("--rundate", default="20250901")

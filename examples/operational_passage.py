@@ -124,6 +124,7 @@ def gfs_cycles(
 
 
 def main() -> int:
+    """Parse arguments, fetch inputs (or load a pack), run the passage."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--start-date", default="2025-09-01", help="passage start (UTC)"

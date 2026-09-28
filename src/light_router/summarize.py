@@ -55,13 +55,18 @@ def _rows_from_csv(run_dir: Path) -> list[StaircaseRow]:
                 initial_bearing_diff_deg=float(rec["initial_bearing_diff_deg"]),
                 geographic_divergence_nm=float(rec["geographic_divergence_nm"]),
             )
-            budget_bytes = rec["budget"]
+            label = rec["budget"]
+            raw_bytes = rec.get("budget_bytes", "")
+            if raw_bytes:
+                budget_bytes: int | None = int(raw_bytes)
+            elif label == "unlimited":
+                budget_bytes = None
+            else:  # CSV written before the budget_bytes column existed
+                budget_bytes = _budget_bytes(label)
             rows.append(
                 StaircaseRow(
-                    budget=budget_bytes,
-                    budget_bytes=None
-                    if budget_bytes == "unlimited"
-                    else _budget_bytes(budget_bytes),
+                    budget=label,
+                    budget_bytes=budget_bytes,
                     package_bytes=int(rec["package_bytes"]),
                     spatial_stride=int(rec["spatial_stride"]),
                     temporal_stride=int(rec["temporal_stride"]),
@@ -156,6 +161,7 @@ def summarize(run_dir: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: ``python -m light_router.summarize <run_dir>``."""
     argv = argv if argv is not None else sys.argv[1:]
     if len(argv) != 1:
         print("usage: python -m light_router.summarize <run_dir>", file=sys.stderr)

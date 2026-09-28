@@ -125,15 +125,22 @@ Applied in the order fixed by the Benchmark Harness page:
 `package_size()` returns the honest compressed byte size of the degraded
 forecast package (header + zlib payload). The payload is the quantized code
 array packed at b bits per value — not an upcast intermediate — so the bits
-dimension genuinely moves the measured size. `degrade()` and
-`package_size()` share one quantization helper and cannot diverge.
+dimension genuinely moves the measured size. The header is decodable on its
+own: a 4-byte length prefix, a JSON document (variable names, bit depth,
+per-variable dequantization scales), then the strided time/lat/lon axes as
+float64 — a receiver can reconstruct the grid from header + payload with no
+out-of-band knowledge. `degrade()` and `package_size()` share one
+quantization helper and cannot diverge.
 
 ### 5. Budget staircase + metrics (`staircase.py`, `metrics.py`, `scenario.py`)
 
 - `run_staircase(weather: xr.Dataset, router_factory, start, finish,
-  staircase)` — the harness speaks the CF Dataset and the Router protocol
-  through a factory `Callable[[xr.Dataset], Router]`; `Scenario.run` wraps it
-  as one episode (Gymnasium semantics, rule 3).
+  staircase, start_time)` — the harness speaks the CF Dataset and the
+  Router protocol through a factory `Callable[[xr.Dataset], Router]`
+  (defined once, next to the protocol, as `isochrone.RouterFactory`);
+  `start_time` (hours since forecast initialization) is forwarded to the
+  reference router and every budget-level router. `Scenario.run` wraps
+  the harness as one episode (Gymnasium semantics, rule 3).
 
 - Staircase: Unlimited -> 1 MB -> 500 KB -> 250 KB -> 100 KB -> 50 KB ->
   25 KB -> 10 KB -> 5 KB -> 2 KB -> 1 KB.
@@ -211,6 +218,13 @@ Run directory layout: `runs/<scenario>/<timestamp>-<gitsha>/`
   directory without re-running the router
 
 Same inputs produce the same artifact content (Decision #18).
+
+**Committed review runs.** A run directory may be committed to git as PR
+review evidence (the PR body embeds its plots). Such runs must stay small
+(a few MB: manifest, CSVs, GPX/GeoJSON, PNGs) and are historical records —
+they are not re-generated. Heavy data (raw GRIB caches, data packs) is
+never committed; it stays on the fetch machine (gitignored) with the pack
+manifest mirrored off-site (see section 6).
 
 ### 8. Data clients (`data/gfs.py`, `data/chom.py`)
 

@@ -6,7 +6,12 @@ from light_router.isochrone import RouterConfig
 from light_router.metrics import compare_routes
 from light_router.polar import synthetic_cruising_polar
 from light_router.scenario import surrogate_router_factory
-from light_router.staircase import STAIRCASE, run_staircase, write_csv
+from light_router.staircase import (
+    STAIRCASE,
+    budget_label,
+    run_staircase,
+    write_csv,
+)
 from light_router.synthetic import add_storm, trade_wind_field
 
 START = (28.0, -15.5)
@@ -83,6 +88,23 @@ def test_degradation_grows_as_budget_shrinks(weather):
         > best.metrics.geographic_divergence_nm + 10.0
     )
     assert worse
+
+
+def test_start_time_is_forwarded(weather):
+    start_time = 12.0
+    result = run_staircase(
+        weather, make_factory(), START, FINISH, start_time=start_time
+    )
+    # the reference and every level depart at start_time
+    assert result.reference.time[0] == pytest.approx(start_time)
+    for row in result.rows:
+        assert row.route.time[0] == pytest.approx(start_time)
+
+
+def test_budget_labels():
+    assert budget_label(None) == "unlimited"
+    assert budget_label(10_000) == "10 KB"
+    assert budget_label(500) == "500 B"
 
 
 def test_write_csv(tmp_path, weather):

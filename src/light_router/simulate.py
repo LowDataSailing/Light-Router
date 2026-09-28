@@ -31,6 +31,7 @@ from .geo import destination, great_circle_distance, initial_bearing
 from .isochrone import Route, RouterConfig
 from .polar import PolarTable
 from .scenario import surrogate_router_factory
+from .staircase import budget_label
 
 
 @dataclass
@@ -269,13 +270,7 @@ def format_operational_summary(results: list[PassageResult]) -> str:
         f"{'passage h':>10} {'vs unlimited':>12} {'reached':>8}"
     ]
     for result in results:
-        label = (
-            "unlimited"
-            if result.budget_bytes is None
-            else f"{result.budget_bytes // 1000} KB"
-            if result.budget_bytes >= 1000
-            else f"{result.budget_bytes} B"
-        )
+        label = budget_label(result.budget_bytes)
         per_cycle = result.total_package_bytes // max(len(result.cycles), 1)
         total_kb = result.total_package_bytes / 1000
         diff = result.passage_hours - reference.passage_hours

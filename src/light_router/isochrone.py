@@ -11,7 +11,7 @@ No land avoidance, no currents — Level 1 per the Baseline System spec.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
 
 import numpy as np
 import xarray as xr
@@ -64,6 +64,17 @@ class RouterConfig:
     max_hours: float = 240.0
     min_speed_kt: float = 0.1  # below this a candidate cannot sail
 
+    def as_dict(self) -> dict[str, float | int]:
+        """Plain-dict form for manifests and other serialized output."""
+        return {
+            "dt_hours": self.dt_hours,
+            "n_headings": self.n_headings,
+            "bin_deg": self.bin_deg,
+            "max_points": self.max_points,
+            "finish_radius_nm": self.finish_radius_nm,
+            "max_hours": self.max_hours,
+        }
+
 
 @runtime_checkable
 class Router(Protocol):
@@ -82,6 +93,17 @@ class Router(Protocol):
         finish: tuple[float, float],
         start_time: float = 0.0,
     ) -> Route: ...
+
+
+RouterFactory = Callable[[xr.Dataset], Router]
+"""Binds a weather dataset to a Router (Compatibility rule 2).
+
+Defined once here, next to the Router protocol it produces; the harness
+(``staircase``), the episode wrapper (``scenario``) and the oracle adapter
+all share this type. For the oracle, the factory writes the dataset to
+disk and drives the pinned subprocess; for the surrogate, it builds an
+``IsochroneRouter`` in-process.
+"""
 
 
 @dataclass
@@ -249,6 +271,7 @@ class IsochroneRouter:
     def _closest_point(
         self, levels: list[_Level], finish: tuple[float, float]
     ) -> tuple[int, int]:
+        """Level and index of the candidate that came closest to the finish."""
         best_level, best_idx, best_dist = 0, 0, np.inf
         for li, level in enumerate(levels):
             dist = np.asarray(
@@ -312,6 +335,7 @@ class IsochroneRouter:
         )
 
     def _empty_route(self, start: tuple[float, float], start_time: float) -> Route:
+        """Trivial route for a start already inside the finish radius."""
         return Route(
             lat=np.array([start[0]]),
             lon=np.array([start[1]]),

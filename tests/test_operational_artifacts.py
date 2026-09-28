@@ -13,9 +13,9 @@ from light_router.artifacts import (
     PASSAGE_NAME,
     budget_slug,
     new_run_dir,
-    operational_budget_label,
     write_operational_artifacts,
 )
+from light_router.staircase import budget_label
 from light_router.dataset import to_cf_dataset
 from light_router.isochrone import RouterConfig
 from light_router.polar import synthetic_cruising_polar
@@ -88,10 +88,10 @@ def run_dir(results, tmp_path_factory):
 
 
 def test_budget_labels():
-    assert operational_budget_label(None) == "unlimited"
-    assert operational_budget_label(3000) == "3 KB"
-    assert operational_budget_label(500) == "500 B"
-    assert budget_slug(operational_budget_label(None)) == "unlimited"
+    assert budget_label(None) == "unlimited"
+    assert budget_label(3000) == "3 KB"
+    assert budget_label(500) == "500 B"
+    assert budget_slug(budget_label(None)) == "unlimited"
 
 
 def test_passage_result_as_route(results):
@@ -111,7 +111,7 @@ def test_operational_run_dir_contents(run_dir):
     assert CYCLES_NAME in names
     assert "wind_snapshot.npz" in names
     for budget in BUDGETS:
-        slug = budget_slug(operational_budget_label(budget))
+        slug = budget_slug(budget_label(budget))
         assert f"track_{slug}.gpx" in names
         assert f"track_{slug}.geojson" in names
 

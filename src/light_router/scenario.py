@@ -17,15 +17,12 @@ sequential-decision work) is a thin wrapper later:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
 
 import xarray as xr
 
-from .isochrone import IsochroneRouter, Router, RouterConfig
+from .isochrone import IsochroneRouter, Router, RouterConfig, RouterFactory
 from .polar import PolarTable
 from .staircase import STAIRCASE, StaircaseResult, run_staircase
-
-RouterFactory = Callable[[xr.Dataset], Router]
 
 
 @dataclass
@@ -41,7 +38,12 @@ class Scenario:
     def run(self, router_factory: RouterFactory) -> StaircaseResult:
         """Run the degradation staircase for this scenario (the episode)."""
         return run_staircase(
-            self.weather, router_factory, self.start, self.finish, self.staircase
+            self.weather,
+            router_factory,
+            self.start,
+            self.finish,
+            self.staircase,
+            start_time=self.start_time,
         )
 
 

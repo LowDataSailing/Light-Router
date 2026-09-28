@@ -22,7 +22,7 @@ import xarray as xr
 from .dataset import dataset_extent
 from .isochrone import Route, RouterConfig
 from .simulate import PassageResult
-from .staircase import StaircaseResult, write_csv
+from .staircase import StaircaseResult, budget_label, write_csv
 
 MANIFEST_NAME = "manifest.json"
 METRICS_NAME = "metrics.csv"
@@ -100,14 +100,7 @@ def write_manifest(
             "extent_east_west_south_north": list(dataset_extent(weather)),
         },
         "route": {"start": list(start), "finish": list(finish)},
-        "router_config": {
-            "dt_hours": router_config.dt_hours,
-            "n_headings": router_config.n_headings,
-            "bin_deg": router_config.bin_deg,
-            "max_points": router_config.max_points,
-            "finish_radius_nm": router_config.finish_radius_nm,
-            "max_hours": router_config.max_hours,
-        },
+        "router_config": router_config.as_dict(),
         "staircase": staircase,
     }
     path = run_dir / MANIFEST_NAME
@@ -134,15 +127,6 @@ def write_wind_snapshot(run_dir: Path, weather: xr.Dataset) -> Path:
 def budget_slug(budget: str) -> str:
     """File-name-safe form of a budget label ("100 KB" -> "100KB")."""
     return budget.replace(" ", "")
-
-
-def operational_budget_label(budget: int | None) -> str:
-    """Human label of an operational budget (None -> "unlimited")."""
-    if budget is None:
-        return "unlimited"
-    if budget >= 1000:
-        return f"{budget // 1000} KB"
-    return f"{budget} B"
 
 
 def write_artifacts(
@@ -195,7 +179,7 @@ def _write_passage_csv(path: Path, results: list[PassageResult]) -> None:
     lines = ["budget,total_package_bytes,cycles,passage_hours,distance_nm,reached"]
     for result in results:
         lines.append(
-            f"{operational_budget_label(result.budget_bytes)},"
+            f"{budget_label(result.budget_bytes)},"
             f"{result.total_package_bytes},{len(result.cycles)},"
             f"{result.passage_hours:.2f},{result.distance_nm:.1f},{result.reached}"
         )
@@ -209,7 +193,7 @@ def _write_cycles_csv(path: Path, results: list[PassageResult]) -> None:
         "package_bytes,plan_reached,planned_arrival_hour"
     ]
     for result in results:
-        label = operational_budget_label(result.budget_bytes)
+        label = budget_label(result.budget_bytes)
         for record in result.cycles:
             config = record.config
             arrival = (
@@ -263,7 +247,7 @@ def write_operational_artifacts(
     _write_passage_csv(run_dir / PASSAGE_NAME, results)
     _write_cycles_csv(run_dir / CYCLES_NAME, results)
     for result in results:
-        label = operational_budget_label(result.budget_bytes)
+        label = budget_label(result.budget_bytes)
         write_route_files(run_dir, result.as_route(), f"track_{budget_slug(label)}")
     if plots:
         write_operational_plots(run_dir, results, truth)

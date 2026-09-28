@@ -194,9 +194,9 @@ def write_operational_plots(
     run_dir: Path, results: list[PassageResult], truth: xr.Dataset
 ) -> None:
     """Write the operational charts: actual tracks on the truth wind, budget curve."""
-    from .artifacts import operational_budget_label
+    from .staircase import budget_label
 
-    tracks = {operational_budget_label(r.budget_bytes): r.as_route() for r in results}
+    tracks = {budget_label(r.budget_bytes): r.as_route() for r in results}
     plot_tracks(
         run_dir / "plot_tracks.png",
         tracks,

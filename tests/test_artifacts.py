@@ -145,7 +145,7 @@ def test_manifest_fields(run_dir):
 
 def test_metrics_csv_in_run_dir(run_dir, result):
     lines = (run_dir / METRICS_NAME).read_text().splitlines()
-    assert lines[0].startswith("budget,package_bytes")
+    assert lines[0].startswith("budget,budget_bytes,package_bytes")
     assert len(lines) == len(result[2].rows) + 1
 
 

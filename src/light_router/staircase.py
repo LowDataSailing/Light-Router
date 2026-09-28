@@ -15,17 +15,14 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import xarray as xr
 
 from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
 from .dataset import grid_from_dataset, to_cf_dataset
-from .isochrone import Route, Router
+from .isochrone import Route, RouterFactory
 from .metrics import RouteMetrics, compare_routes
 from .weather import WeatherGrid
-
-RouterFactory = Callable[[xr.Dataset], Router]
 
 STAIRCASE: list[int | None] = [
     None,  # unlimited
@@ -62,17 +59,32 @@ class StaircaseResult:
     reference: Route
 
 
+def budget_label(budget: int | None) -> str:
+    """Canonical human label of a byte budget (None -> "unlimited")."""
+    if budget is None:
+        return "unlimited"
+    if budget >= 1000:
+        return f"{budget // 1000} KB"
+    return f"{budget} B"
+
+
 def run_staircase(
     weather: xr.Dataset,
     router_factory: RouterFactory,
     start: tuple[float, float],
     finish: tuple[float, float],
     staircase: list[int | None] | None = None,
+    start_time: float = 0.0,
 ) -> StaircaseResult:
-    """Run the degradation curve experiment. Returns one row per budget."""
+    """Run the degradation curve experiment. Returns one row per budget.
+
+    ``start_time`` is the departure time in hours since forecast
+    initialization; it is forwarded to the reference router and to every
+    budget-level router, so degraded routes are compared like for like.
+    """
     staircase = staircase if staircase is not None else STAIRCASE
     grid = grid_from_dataset(weather)
-    reference = router_factory(weather).route(start, finish)
+    reference = router_factory(weather).route(start, finish, start_time)
     if not reference.reached:
         raise RuntimeError(
             "reference route did not reach the finish; the scenario or the "
@@ -85,7 +97,16 @@ def run_staircase(
         if config is None:
             continue  # budget unreachable even fully degraded
         rows.append(
-            _run_level(grid, router_factory, reference, config, budget, start, finish)
+            _run_level(
+                grid,
+                router_factory,
+                reference,
+                config,
+                budget,
+                start,
+                finish,
+                start_time,
+            )
         )
     return StaircaseResult(rows=rows, reference=reference)
 
@@ -98,20 +119,17 @@ def _run_level(
     budget: int | None,
     start: tuple[float, float],
     finish: tuple[float, float],
+    start_time: float,
 ) -> StaircaseRow:
+    """Route on one degraded package and measure it against the reference."""
     degraded_grid = degrade(grid, config)
     size = package_size(grid, config)
-    route = router_factory(to_cf_dataset(degraded_grid)).route(start, finish)
-    metrics = compare_routes(reference, route, finish)
-    label = (
-        "unlimited"
-        if budget is None
-        else f"{budget // 1000} KB"
-        if budget >= 1000
-        else f"{budget} B"
+    route = router_factory(to_cf_dataset(degraded_grid)).route(
+        start, finish, start_time
     )
+    metrics = compare_routes(reference, route, finish)
     return StaircaseRow(
-        budget=label,
+        budget=budget_label(budget),
         budget_bytes=budget,
         package_bytes=size,
         spatial_stride=config.spatial_stride,
@@ -125,8 +143,9 @@ def _run_level(
 def format_summary(rows: list[StaircaseRow]) -> str:
     """Human-readable staircase table (the console summary)."""
     lines = [
-        f"{'budget':>10} {'bytes':>9} {'s/t/b':>10} {'ETA diff':>9} "
-        f"{'dist diff':>9} {'VMG diff':>8} {'decision':>8} {'geo div':>8}"
+        f"{'budget':>10} {'bytes':>9} {'s/t/bits':>10} {'ETA diff':>9} "
+        f"{'dist diff':>9} {'VMG diff':>8} {'decision':>8} {'geo div':>8}",
+        "(s/t/bits = spatial stride / temporal stride / quantization bits)",
     ]
     for row in rows:
         m = row.metrics
@@ -148,6 +167,7 @@ def write_csv(rows: list[StaircaseRow], path: Path) -> None:
         writer.writerow(
             [
                 "budget",
+                "budget_bytes",
                 "package_bytes",
                 "spatial_stride",
                 "temporal_stride",
@@ -167,6 +187,7 @@ def write_csv(rows: list[StaircaseRow], path: Path) -> None:
             writer.writerow(
                 [
                     row.budget,
+                    row.budget_bytes if row.budget_bytes is not None else "",
                     row.package_bytes,
                     row.spatial_stride,
                     row.temporal_stride,

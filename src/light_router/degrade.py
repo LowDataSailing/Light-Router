@@ -10,6 +10,7 @@ Order fixed by the Benchmark Harness spec:
 
 from __future__ import annotations
 
+import json
 import zlib
 from dataclasses import dataclass
 
@@ -112,24 +113,39 @@ def package_size(grid: WeatherGrid, config: DegradeConfig) -> int:
     """Compressed byte size of the degraded package (header + zlib payload).
 
     The payload is the b-bit-packed quantized code array, which is what
-    would actually be transmitted; the header carries the scales/offsets.
+    would actually be transmitted. The header is decodable on its own:
+    a 4-byte big-endian length prefix, then a JSON document carrying the
+    variable names, the bit depth and the per-variable (vmin, vmax)
+    dequantization scales, then the strided time/lat/lon axes as float64.
+    A receiver can reconstruct the grid from header + payload without
+    any out-of-band knowledge.
     """
+    sliced = _sliced(grid, config)
     payload = b""
-    for name, sub in _sliced(grid, config).items():
+    scales: dict[str, list[float]] = {}
+    for name, sub in sliced.items():
         if config.bits >= 32:
             payload += sub.astype(np.float32).tobytes()
         else:
-            codes, _, _ = _codes(sub, config.bits)
+            codes, vmin, vmax = _codes(sub, config.bits)
             payload += _pack_codes(codes, config.bits)
+            scales[name] = [vmin, vmax]
     compressed = zlib.compress(payload, level=9)
-    # header: per-variable scale/offset (2 float64) + axes (float64 each)
-    header = 16 * len(config.keep_variables)
-    header += 8 * (
-        len(grid.times[:: config.temporal_stride])
-        + len(grid.lats[:: config.spatial_stride])
-        + len(grid.lons[:: config.spatial_stride])
+    meta = json.dumps(
+        {
+            "variables": sorted(sliced),
+            "bits": config.bits,
+            "scales": scales,
+        },
+        separators=(",", ":"),
+    ).encode()
+    header = len(meta).to_bytes(4, "big") + meta
+    header += (
+        grid.times[:: config.temporal_stride].astype(np.float64).tobytes()
+        + grid.lats[:: config.spatial_stride].astype(np.float64).tobytes()
+        + grid.lons[:: config.spatial_stride].astype(np.float64).tobytes()
     )
-    return header + len(compressed)
+    return len(header) + len(compressed)
 
 
 def candidate_configs() -> list[DegradeConfig]:
