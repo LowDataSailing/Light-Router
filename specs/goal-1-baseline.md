@@ -219,12 +219,12 @@ Run directory layout: `runs/<scenario>/<timestamp>-<gitsha>/`
 
 Same inputs produce the same artifact content (Decision #18).
 
-**Committed review runs.** A run directory may be committed to git as PR
-review evidence (the PR body embeds its plots). Such runs must stay small
-(a few MB: manifest, CSVs, GPX/GeoJSON, PNGs) and are historical records —
-they are not re-generated. Heavy data (raw GRIB caches, data packs) is
-never committed; it stays on the fetch machine (gitignored) with the pack
-manifest mirrored off-site (see section 6).
+**Run directories are never committed.** They are experiment output, not
+source: they stay on the machine that produced them (gitignored,
+`runs/`), like the heavy data (raw GRIB caches, data packs). To share a
+run for review, publish the run directory (or its plots) outside git
+and link it from the PR; the manifest and checksums inside the
+directory remain the provenance record.
 
 ### 8. Data clients (`data/gfs.py`, `data/chom.py`)
 
