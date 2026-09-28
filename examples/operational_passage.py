@@ -25,6 +25,10 @@ Usage:
     uv run python examples/operational_passage.py --export-pack data/packs/ccv
     uv run python examples/operational_passage.py --pack data/packs/ccv \
         --artifacts          # rerun offline from the pack, no network/GRIB
+    uv run python examples/operational_passage.py --start 28.0,-15.5 \
+        --finish 14.6,-61.0 --scenario atlantic_canaries_caribbean \
+        --start-date 2025-11-15 --days 20 --max-passage-hours 600 \
+        --artifacts          # full Atlantic crossing (Canaries -> Martinique)
 
 GRIB loading needs the ``grib`` dependency group and a system ecCodes
 library (Debian: ``apt install libeccodes0``). Downloads are cached under
@@ -62,14 +66,18 @@ from light_router.simulate import (  # noqa: E402
 )
 from light_router.weather import route_grid_box  # noqa: E402
 
-START = (28.0, -15.5)  # Canary Islands
-FINISH = (16.75, -22.9)  # Sal, Cape Verde
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
 RUNS = Path(__file__).resolve().parents[1] / "runs"
 
 FORECAST_HOURS = list(range(0, 121, 3))  # each cycle's 120 h horizon
 TRUTH_STEP_DEG = 0.5
 DEFAULT_BUDGETS = "unlimited,100000,10000,5000,2000,1000"
+
+
+def parse_position(text: str) -> tuple[float, float]:
+    """Parse a "lat,lon" CLI argument."""
+    lat_s, lon_s = text.split(",")
+    return float(lat_s), float(lon_s)
 
 
 def parse_budgets(text: str) -> list[int | None]:
@@ -130,10 +138,31 @@ def main() -> int:
         "--start-date", default="2025-09-01", help="passage start (UTC)"
     )
     parser.add_argument(
+        "--start",
+        default="28.0,-15.5",
+        help="passage start as lat,lon (default: Canary Islands)",
+    )
+    parser.add_argument(
+        "--finish",
+        default="16.75,-22.9",
+        help="passage finish as lat,lon (default: Sal, Cape Verde)",
+    )
+    parser.add_argument(
+        "--scenario",
+        default="operational_canaries_cv",
+        help="scenario name (run directory and pack label)",
+    )
+    parser.add_argument(
         "--days",
         type=int,
         default=7,
         help="days of truth/cycles to fetch (covers the passage horizon)",
+    )
+    parser.add_argument(
+        "--max-passage-hours",
+        type=float,
+        default=240.0,
+        help="simulation horizon in hours (raise for long passages)",
     )
     parser.add_argument("--budgets", default=DEFAULT_BUDGETS)
     parser.add_argument("--workers", type=int, default=8, help="parallel downloads")
@@ -155,8 +184,10 @@ def main() -> int:
     args = parser.parse_args()
 
     start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    start_pos = parse_position(args.start)
+    finish_pos = parse_position(args.finish)
     budgets = parse_budgets(args.budgets)
-    extent = route_grid_box(START, FINISH, margin_deg=4.0)
+    extent = route_grid_box(start_pos, finish_pos, margin_deg=4.0)
 
     if args.pack:
         truth, cycles = load_pack(Path(args.pack))
@@ -171,7 +202,7 @@ def main() -> int:
         if args.export_pack:
             pack_dir = write_pack(
                 Path(args.export_pack),
-                scenario="operational_canaries_cv",
+                scenario=args.scenario,
                 truth=truth,
                 cycles=cycles,
                 source={
@@ -199,28 +230,28 @@ def main() -> int:
     results = run_operational_staircase(
         truth,
         cycles,
-        START,
-        FINISH,
+        start_pos,
+        finish_pos,
         synthetic_cruising_polar(),
         budgets,
         router_config,
         cycle_hours=6.0,
         dt_hours=1.0,
         finish_radius_nm=25.0,
-        max_hours=240.0,
+        max_hours=args.max_passage_hours,
     )
 
     print(format_operational_summary(results))
 
     if args.artifacts:
-        run_dir = new_run_dir(RUNS, scenario="operational_canaries_cv")
+        run_dir = new_run_dir(RUNS, scenario=args.scenario)
         write_operational_artifacts(
             run_dir,
             results,
             truth,
-            scenario="operational_canaries_cv",
-            start=START,
-            finish=FINISH,
+            scenario=args.scenario,
+            start=start_pos,
+            finish=finish_pos,
             router_config=router_config,
             budgets=budgets,
             source={
