@@ -100,3 +100,31 @@ def test_download_missing_variable_raises(tmp_path, monkeypatch):
     )
     with pytest.raises(ValueError, match="matching messages"):
         download_gfs_archive_wind("20250915", "00", [0], tmp_path)
+
+
+def test_retry_transient_rides_out_5xx(monkeypatch):
+    """A transient S3 500 is retried, not fatal; a 404 raises immediately."""
+    import urllib.error
+
+    from light_router.data import gfs_archive
+
+    calls: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr(gfs_archive.time, "sleep", lambda s: sleeps.append(s))
+
+    def flaky(url, timeout_s):
+        calls.append(url)
+        if len(calls) <= 2:
+            raise urllib.error.HTTPError(url, 500, "Internal Server Error", {}, None)
+        return "ok"
+
+    assert gfs_archive._retry_transient(flaky, "u", 60) == "ok"
+    assert len(calls) == 3
+    assert sleeps == [30.0, 60.0]
+
+    def missing(url, timeout_s):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        gfs_archive._retry_transient(missing, "u", 60)
+    assert len(calls) == 3  # the 404 was not retried

@@ -29,6 +29,10 @@ Usage:
         --finish 14.6,-61.0 --scenario atlantic_canaries_caribbean \
         --start-date 2025-11-15 --days 20 --max-passage-hours 600 \
         --artifacts          # full Atlantic crossing (Canaries -> Martinique)
+    uv run python examples/operational_passage.py --start 14.6,-61.0 \
+        --finish 48.4,-4.8 --scenario atlantic_caribbean_brittany \
+        --start-date 2025-03-01 --days 30 --max-passage-hours 700 \
+        --margin 2.0 --artifacts  # full Atlantic crossing (Martinique -> Brest)
 
 GRIB loading needs the ``grib`` dependency group and a system ecCodes
 library (Debian: ``apt install libeccodes0``). Downloads are cached under
@@ -164,6 +168,14 @@ def main() -> int:
         default=240.0,
         help="simulation horizon in hours (raise for long passages)",
     )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=4.0,
+        help="margin around the start->finish bounding box (deg); a smaller "
+        "margin keeps the ERA5 point fetch under the Open-Meteo daily "
+        "quota (~10k weighted calls) on long routes",
+    )
     parser.add_argument("--budgets", default=DEFAULT_BUDGETS)
     parser.add_argument("--workers", type=int, default=8, help="parallel downloads")
     parser.add_argument(
@@ -187,7 +199,7 @@ def main() -> int:
     start_pos = parse_position(args.start)
     finish_pos = parse_position(args.finish)
     budgets = parse_budgets(args.budgets)
-    extent = route_grid_box(start_pos, finish_pos, margin_deg=4.0)
+    extent = route_grid_box(start_pos, finish_pos, margin_deg=args.margin)
 
     if args.pack:
         truth, cycles = load_pack(Path(args.pack))

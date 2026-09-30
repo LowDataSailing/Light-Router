@@ -13,6 +13,7 @@ u10/v10 (m/s) for the canonical CF Dataset.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import urllib.error
@@ -53,12 +54,15 @@ def _fetch_json(url: str, timeout_s: int) -> object:
         return json.loads(response.read().decode())
 
 
-def _fetch_json_throttled(url: str, timeout_s: int, max_retries: int = 5) -> object:
+def _fetch_json_throttled(url: str, timeout_s: int, max_retries: int = 60) -> object:
     """Fetch one batch, retrying on the API's rate limit (HTTP 429).
 
     Open-Meteo weights a multi-location request by its location count, so a
-    grid fetch can exceed the per-minute call quota; the response's
-    Retry-After header says when the quota resets.
+    grid fetch can exceed the per-minute or per-hour call quota; the
+    response's Retry-After header says when the quota resets. Long routes
+    need more calls than one hourly window allows, so retries are patient
+    enough (up to ~60 x 5 min) to bridge an hourly quota reset; a batch
+    cache (see fetch_era5_wind_grid) makes any give-up cheap to resume.
     """
     attempt = 0
     while True:
@@ -95,8 +99,10 @@ def fetch_era5_wind_grid(
     The time axis is hours since ``start_date`` 00:00 UTC — the absolute
     passage clock. Points are batched ``batch_size`` per request, pausing
     ``pause_s`` between batches to stay under the API's per-minute call
-    quota (a batch of N locations counts as N calls); raw responses are
-    cached at ``cache_path`` (one JSON file) so re-runs are free.
+    quota (a batch of N locations counts as N calls). With ``cache_path``,
+    every batch response is cached on disk as it arrives, so an interrupted
+    fetch (rate-limit give-up, crash) resumes where it left over; the
+    assembled grid is then cached at ``cache_path`` so full re-runs are free.
     """
     if cache_path is not None and cache_path.exists():
         return _grid_from_cache(cache_path, lats, lons, start_date)
@@ -105,8 +111,20 @@ def fetch_era5_wind_grid(
     lon_values = np.asarray(lons, dtype=float)
     points = [(float(la), float(lo)) for la in lat_values for lo in lon_values]
 
+    batch_dir = None
+    if cache_path is not None:
+        fingerprint = hashlib.sha256(
+            json.dumps([start_date, end_date, points]).encode()
+        ).hexdigest()[:12]
+        batch_dir = cache_path.parent / f"{cache_path.name}.batches.{fingerprint}"
+        batch_dir.mkdir(parents=True, exist_ok=True)
+
     locations: list[dict] = []
     for i in range(0, len(points), batch_size):
+        batch_path = batch_dir / f"{i:06d}.json" if batch_dir is not None else None
+        if batch_path is not None and batch_path.exists():
+            locations.extend(json.loads(batch_path.read_text()))
+            continue
         if i and pause_s:
             time.sleep(pause_s)
         batch = points[i : i + batch_size]
@@ -116,6 +134,8 @@ def fetch_era5_wind_grid(
         result = _fetch_json_throttled(url, timeout_s)
         if not isinstance(result, list):
             raise ValueError(f"ERA5 API error for batch {i}: {result}")
+        if batch_path is not None:
+            batch_path.write_text(json.dumps(result))
         locations.extend(result)
 
     times = _hours_since_start(locations[0]["hourly"]["time"], start_date)

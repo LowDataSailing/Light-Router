@@ -90,3 +90,54 @@ def test_fetch_retries_on_rate_limit(monkeypatch):
     assert len(calls) == 3  # 429 + retry, then the second batch
     assert sleeps == [0.0]  # honored Retry-After
     assert dict(ds.sizes) == {"time": 2, "latitude": 2, "longitude": 2}
+
+
+def test_fetch_resumes_from_batch_cache(tmp_path, monkeypatch):
+    """Already-fetched batches are read from disk, not re-requested."""
+    import hashlib
+    import json
+
+    from light_router.data import era5
+
+    lats = np.array([10.0, 10.5])
+    lons = np.array([-20.0, -19.5])
+    points = [(float(la), float(lo)) for la in lats for lo in lons]
+    payload = [
+        {
+            "hourly": {
+                "time": ["2025-09-01T00:00", "2025-09-01T01:00"],
+                "wind_speed_10m": [10.0, 10.0],
+                "wind_direction_10m": [0.0, 0.0],
+            }
+        }
+        for _ in range(2)
+    ]
+
+    cache_path = tmp_path / "era5.json"
+    fingerprint = hashlib.sha256(
+        json.dumps(["2025-09-01", "2025-09-01", points]).encode()
+    ).hexdigest()[:12]
+    batch_dir = tmp_path / f"era5.json.batches.{fingerprint}"
+    batch_dir.mkdir(parents=True)
+    (batch_dir / "000000.json").write_text(json.dumps(payload))  # batch 0 done
+
+    calls: list[str] = []
+
+    def fake_fetch(url: str, timeout_s: int) -> object:
+        calls.append(url)
+        return payload
+
+    monkeypatch.setattr(era5, "_fetch_json", fake_fetch)
+    ds = era5.fetch_era5_wind_grid(
+        lats,
+        lons,
+        "2025-09-01",
+        "2025-09-01",
+        cache_path=cache_path,
+        batch_size=2,
+        pause_s=0.0,
+    )
+    assert len(calls) == 1  # only batch 1 was fetched
+    assert (batch_dir / "000002.json").exists()
+    assert cache_path.exists()  # assembled grid cached for full re-runs
+    assert dict(ds.sizes) == {"time": 2, "latitude": 2, "longitude": 2}
