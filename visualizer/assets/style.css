@@ -115,6 +115,11 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* Leaflet dark tweaks */
 .leaflet-container { background: #0b0f14; }
+/* OSM raster tiles are light; invert them into the dark theme
+   (CARTO's dark basemaps now require an API key). */
+.leaflet-tile-pane img {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85) saturate(0.6);
+}
 .leaflet-control-attribution {
   background: rgba(11, 15, 20, 0.7) !important;
   color: var(--muted) !important;
