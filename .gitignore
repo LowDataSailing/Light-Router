@@ -101,3 +101,7 @@ data/cache/
 experiments/output/*
 runs/
 data/packs/
+
+# Visualizer (tracked despite the broad asset ignores above)
+!visualizer/**
+visualizer/dist/

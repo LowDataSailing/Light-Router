@@ -1,0 +1,24 @@
+# Pascal deployment: serves the generated visualizer site on the shared
+# `ingress` docker network, behind the openresty gateway + authentik.
+#
+#   python visualizer/build.py          # (re)generate visualizer/dist
+#   docker compose -f visualizer/docker-compose.yml up -d --build
+name: lightrouter-viz
+
+services:
+  viz:
+    build: .
+    image: lightrouter-viz:latest
+    container_name: lightrouter_viz
+    restart: unless-stopped
+    volumes:
+      # Bind mount wins over the image copy: regenerate without rebuilding.
+      - ./dist:/usr/share/nginx/html:ro
+    networks:
+      ingress:
+        aliases:
+          - lightrouter-viz
+
+networks:
+  ingress:
+    external: true
