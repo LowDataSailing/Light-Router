@@ -49,6 +49,11 @@ main { flex: 1; display: flex; min-height: 0; }
   font-size: 0.7rem;
   color: var(--muted);
 }
+#wind-legend-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-style: italic;
+}
 
 #panel {
   width: 300px;

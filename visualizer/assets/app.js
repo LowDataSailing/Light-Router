@@ -508,7 +508,9 @@
         var pt = this.map.latLngToLayerPoint([lats[r2], lons[c2]]);
         if (pt.x < -30 || pt.y < -30 || pt.x > size.x + 30 || pt.y > size.y + 30) continue;
 
-        var ang = Math.atan2(-v2, u2); // screen coords: y is down
+        // Sailor/meteorological convention: arrows point INTO the wind
+        // (toward where it comes from), like wind barbs on weather maps.
+        var ang = Math.atan2(v2, -u2);
         var len = Math.min(8 + speedKt * 0.8, 24);
         var x1 = pt.x - Math.cos(ang) * len / 2;
         var y1 = pt.y - Math.sin(ang) * len / 2;
