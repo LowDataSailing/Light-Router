@@ -38,10 +38,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    # "numpy>=1.24.0",
-    # "scipy>=1.10.0",
-    # "xarray>=2023.0.0",
-    # "cfgrib>=0.9.10.4",
+    "numpy>=1.24.0",
+    "xarray>=2023.0.0",
 ]
 
 [project.urls]
@@ -53,15 +51,23 @@ Issues = "https://github.com/LowDataSailing/Light-Router/issues"
 [dependency-groups]
 dev = [
     "pytest>=7.4.0",
-    "black>=23.0.0",
-    "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "ruff>=0.6",
 ]
 docs = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.5.0",
     "mkdocs-git-revision-date-localized-plugin>=1.2.0",
     "mkdocs-git-authors-plugin>=0.9.0",
+]
+grib = [
+    "cfgrib>=0.9.10.4",
+]
+artifacts = [
+    "gpxpy>=1.6",
+]
+plot = [
+    "matplotlib>=3.7",
 ]
 # ml = [
 #     "scikit-learn>=1.2.0",
@@ -75,17 +81,22 @@ docs = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/light_router"]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py310", "py311", "py312"]
+target-version = "py310"
+exclude = [".venv", "site", "data/cache", "experiments/output"]
+
+[tool.ruff.lint]
+# mirror the flake8 defaults this repo used before the ruff migration
+select = ["E", "W", "F"]
 
 [tool.pytest.ini_options]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
-warn_return_any = true
+python_version = "3.12"
+warn_return_any = false  # numpy ufunc results are typed Any by the stubs
 warn_unused_configs = true
 ignore_missing_imports = true

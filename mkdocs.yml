@@ -11,18 +11,10 @@ edit_uri: edit/master/docs/
 # Navigation
 nav:
   - Home: index.md
-  - Project:
-      - Overview: PROJECT_DESCRIPTION.md
-      - Objectives: objectives.md
   - Documentation:
-      - Literature Review: literature-review.md
       - Benchmarking: benchmarking.md
-      - Market Positioning: market-positioning.md
       - Meteorological Info Transfer: meteorological-info-transfer.md
       - Routing Algorithms: routing-algorithms.md
-      - Research Ideas: research-ideas.md
-  - Development:
-      - Contributing: CONTRIBUTING.md
   - About: about.md
 
 # Theme
