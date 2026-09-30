@@ -492,41 +492,75 @@
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(fc, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
 
-    // --- quiver arrows on top (uniform, like the artifacts' quiver).
+    // --- wind barbs on top (meteorological: half barb 5 kt, full barb
+    //     10 kt, pennant 50 kt, pointing into the wind).
     var actx = this.arrowCtx;
     actx.setTransform(dpr, 0, 0, dpr, 0, 0);
     actx.clearRect(0, 0, size.x, size.y);
-    actx.strokeStyle = "rgba(255,255,255,0.6)";
+    actx.strokeStyle = "rgba(255,255,255,0.7)";
+    actx.fillStyle = "rgba(255,255,255,0.7)";
     actx.lineWidth = 1.2;
-    actx.beginPath();
+    var strokes = [];
+    var fills = [];
     for (var r2 = 0; r2 < nlat; r2++) {
       for (var c2 = 0; c2 < nlon; c2++) {
         var u2 = u[r2][c2], v2 = v[r2][c2];
         if (u2 === null || v2 === null) continue;
         var speedKt = Math.hypot(u2, v2) * MS_PER_KT;
-        if (speedKt < 1) continue;
+        if (speedKt < 5) continue; // below the half-barb increment
         var pt = this.map.latLngToLayerPoint([lats[r2], lons[c2]]);
         if (pt.x < -30 || pt.y < -30 || pt.x > size.x + 30 || pt.y > size.y + 30) continue;
-
-        // Sailor/meteorological convention: arrows point INTO the wind
-        // (toward where it comes from), like wind barbs on weather maps.
-        var ang = Math.atan2(v2, -u2);
-        var len = Math.min(8 + speedKt * 0.8, 24);
-        var x1 = pt.x - Math.cos(ang) * len / 2;
-        var y1 = pt.y - Math.sin(ang) * len / 2;
-        var x2 = pt.x + Math.cos(ang) * len / 2;
-        var y2 = pt.y + Math.sin(ang) * len / 2;
-        actx.moveTo(x1, y1);
-        actx.lineTo(x2, y2);
-        var head = 5;
-        var a1 = ang + 2.6, a2 = ang - 2.6;
-        actx.moveTo(x2, y2);
-        actx.lineTo(x2 - Math.cos(a1) * head, y2 - Math.sin(a1) * head);
-        actx.moveTo(x2, y2);
-        actx.lineTo(x2 - Math.cos(a2) * head, y2 - Math.sin(a2) * head);
+        this.windBarb(pt.x, pt.y, Math.atan2(v2, -u2), speedKt, strokes, fills);
       }
     }
+    actx.beginPath();
+    for (var s2 = 0; s2 < strokes.length; s2++) {
+      actx.moveTo(strokes[s2][0], strokes[s2][1]);
+      actx.lineTo(strokes[s2][2], strokes[s2][3]);
+    }
     actx.stroke();
+    for (var f2 = 0; f2 < fills.length; f2++) {
+      var tri = fills[f2];
+      actx.beginPath();
+      actx.moveTo(tri[0], tri[1]);
+      actx.lineTo(tri[2], tri[3]);
+      actx.lineTo(tri[4], tri[5]);
+      actx.closePath();
+      actx.fill();
+    }
+  };
+
+  /* Standard wind barb geometry, into the wind. Shaft from the grid
+   * point toward the wind's origin; pennants at the tip, then full
+   * barbs, then the half barb nearest the point. */
+  App.prototype.windBarb = function (x, y, ang, speedKt, strokes, fills) {
+    var SHAFT = 16, STEP = 4.5;
+    var BARB_ANG = ang + Math.PI * 0.65; // trailing side of the shaft
+    var cos = Math.cos(ang), sin = Math.sin(ang);
+    var tipX = x + cos * SHAFT, tipY = y + sin * SHAFT;
+    strokes.push([x, y, tipX, tipY]);
+
+    var n50 = Math.floor(speedKt / 50);
+    var n10 = Math.floor((speedKt % 50) / 10);
+    var n5 = Math.floor(((speedKt % 50) % 10) / 5);
+
+    var px = tipX, py = tipY;
+    var i;
+    for (i = 0; i < n50; i++) {
+      var backX = px - cos * STEP, backY = py - sin * STEP;
+      var wingX = px + Math.cos(BARB_ANG) * 8, wingY = py + Math.sin(BARB_ANG) * 8;
+      fills.push([px, py, backX, backY, wingX, wingY]);
+      px = backX;
+      py = backY;
+    }
+    for (i = 0; i < n10; i++) {
+      strokes.push([px, py, px + Math.cos(BARB_ANG) * 7, py + Math.sin(BARB_ANG) * 7]);
+      px -= cos * STEP;
+      py -= sin * STEP;
+    }
+    if (n5) {
+      strokes.push([px, py, px + Math.cos(BARB_ANG) * 3.5, py + Math.sin(BARB_ANG) * 3.5]);
+    }
   };
 
   window.addEventListener("DOMContentLoaded", function () {
