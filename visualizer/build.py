@@ -50,7 +50,14 @@ def sanitize(value):
 
 
 def write_json(path: Path, value: object) -> None:
-    path.write_text(json.dumps(sanitize(value), allow_nan=False))
+    write_text(path, json.dumps(sanitize(value), allow_nan=False))
+
+
+def write_text(path: Path, text: str) -> None:
+    """Write a file world-readable: the nginx container serves dist/ as
+    another uid, and editors/tools may create 0600 sources."""
+    path.write_text(text)
+    path.chmod(0o644)
 
 
 def find_pack(manifest: dict, packs_dir: Path) -> Path | None:
@@ -161,7 +168,9 @@ def export_run(run_dir: Path, out_dir: Path, packs_dir: Path, frame_hours: float
         "wind": wind,
     }
     write_json(run_out / "run.json", run_index)
-    shutil.copyfile(ASSETS / "run.html", run_out / "index.html")
+    write_text(run_out / "index.html", (ASSETS / "run.html").read_text())
+    for p in run_out.rglob("*"):
+        p.chmod(0o755 if p.is_dir() else 0o644)
 
     return {
         "scenario": manifest["scenario"],
@@ -199,7 +208,7 @@ def write_experiments_index(out_dir: Path, entries: list[dict]) -> None:
         "<h1>Light-Router experiments</h1>"
         "<div class='cards'>" + "".join(cards) + "</div></body></html>"
     )
-    (out_dir / "index.html").write_text(html)
+    write_text(out_dir / "index.html", html)
 
 
 def main() -> None:
@@ -211,10 +220,22 @@ def main() -> None:
     parser.add_argument("--grid-stride", type=int, default=2)
     args = parser.parse_args()
 
+    # Clear the contents in place, never the dist root itself: the docker
+    # bind mount anchors to the root directory's inode, and rmtree+mkdir
+    # would leave the container serving a deleted directory.
     if args.out.exists():
-        shutil.rmtree(args.out)
+        for child in args.out.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    else:
+        args.out.mkdir(parents=True)
+    args.out.chmod(0o755)
     assets_out = args.out / "assets"
     shutil.copytree(ASSETS, assets_out)
+    for copied in assets_out.rglob("*"):
+        copied.chmod(0o755 if copied.is_dir() else 0o644)
 
     entries = []
     for run_dir in sorted(args.runs_dir.glob("*/*")):

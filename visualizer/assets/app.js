@@ -311,7 +311,7 @@
       "route: <b>" + (route.start || []).join(", ") + "</b> &rarr; <b>" +
       (route.finish || []).join(", ") + "</b><br>" +
       "staircase: <b>" + (m.staircase || []).map(function (s) {
-        return s === null ? "unlimited" : (s >= 1000 ? s / 1000 + " MB" : s + " KB");
+        return s === null ? "unlimited" : (s >= 1000 ? s / 1000 + " KB" : s + " B");
       }).join(" · ") + "</b><br>" +
       "checksum: <b>" + String(m.data_checksum || "").slice(0, 12) + "</b>";
   };
