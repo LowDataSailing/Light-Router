@@ -13,16 +13,22 @@ external oracle subprocess are interchangeable here.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import xarray as xr
 
-from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
-from .dataset import grid_from_dataset, to_cf_dataset
-from .isochrone import Route, RouterFactory
-from .metrics import RouteMetrics, compare_routes
-from .weather import WeatherGrid
+from light_router.dataset import grid_from_dataset, to_cf_dataset
+from light_router.harness.degrade import (
+    DegradeConfig,
+    best_config_for_budget,
+    degrade,
+    package_size,
+)
+from light_router.harness.metrics import compare_routes
+from light_router.models.experiment import StaircaseResult, StaircaseRow
+from light_router.models.route import Route
+from light_router.models.weather import WeatherGrid
+from light_router.routing import RouterFactory
 
 STAIRCASE: list[int | None] = [
     None,  # unlimited
@@ -37,26 +43,6 @@ STAIRCASE: list[int | None] = [
     2_000,
     1_000,
 ]
-
-
-@dataclass
-class StaircaseRow:
-    budget: str
-    budget_bytes: int | None
-    package_bytes: int
-    spatial_stride: int
-    temporal_stride: int
-    bits: int
-    metrics: RouteMetrics
-    route: Route = field(repr=False, compare=False)
-
-
-@dataclass
-class StaircaseResult:
-    """Staircase output: one row per budget plus the Level 1 reference route."""
-
-    rows: list[StaircaseRow]
-    reference: Route
 
 
 def budget_label(budget: int | None) -> str:

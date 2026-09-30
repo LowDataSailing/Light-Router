@@ -80,9 +80,11 @@ Thumbs.db
 !LICENSE
 !AGENTS.md
 !docs/*.md
-!docs/agents/*.md
 !docs/adr/*.md
 !specs/*.md
+!CONTRIBUTING.md
+!agents/*.md
+!research/*.md
 
 # Temporary files
 *.tmp
@@ -96,6 +98,6 @@ site/
 
 # Goal 1 prototype artifacts
 data/cache/
-examples/output/*
+experiments/output/*
 runs/
 data/packs/

@@ -1,44 +1,27 @@
-"""Time-stepped isochrone router (Level 1 baseline).
+"""Time-stepped isochrone router: the provisional in-process surrogate.
 
 From each reachable point at time t, expand candidate headings, move each
 candidate by its polar speed over one time step, prune dominated points by
 geographic bin, and repeat until a point reaches the finish. The route is
 reconstructed by backtracking parent pointers.
 
-No land avoidance, no currents — Level 1 per the Baseline System spec.
+This module is the in-repo adapter over the Router seam
+(``light_router.routing.protocol``); the industry oracle subprocess is the
+second adapter (Decision #15). No land avoidance, no currents — Level 1 per
+the Baseline System spec.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Protocol, runtime_checkable
 
 import numpy as np
 import xarray as xr
 
-from .geo import destination, great_circle_distance
-from .polar import PolarTable
-from .weather import WeatherGrid
-
-
-@dataclass
-class Route:
-    """Computed route. Times are hours since the scenario start."""
-
-    lat: np.ndarray
-    lon: np.ndarray
-    time: np.ndarray
-    heading: np.ndarray
-    speed: np.ndarray
-    tws: np.ndarray
-    twa: np.ndarray
-    reached: bool
-    eta_hours: float
-    distance_nm: float
-
-    @property
-    def n_waypoints(self) -> int:
-        return len(self.lat)
+from light_router.geo import destination, great_circle_distance
+from light_router.models.route import Route, RouterConfig
+from light_router.models.vessel import PolarTable
+from light_router.models.weather import WeatherGrid
 
 
 @dataclass
@@ -52,58 +35,6 @@ class _Level:
     speed: np.ndarray
     tws: np.ndarray
     twa: np.ndarray
-
-
-@dataclass
-class RouterConfig:
-    dt_hours: float = 1.0
-    n_headings: int = 36  # every 10 degrees
-    bin_deg: float = 1.0  # geographic pruning bin size
-    max_points: int = 1500  # per level, after pruning
-    finish_radius_nm: float = 25.0
-    max_hours: float = 240.0
-    min_speed_kt: float = 0.1  # below this a candidate cannot sail
-
-    def as_dict(self) -> dict[str, float | int]:
-        """Plain-dict form for manifests and other serialized output."""
-        return {
-            "dt_hours": self.dt_hours,
-            "n_headings": self.n_headings,
-            "bin_deg": self.bin_deg,
-            "max_points": self.max_points,
-            "finish_radius_nm": self.finish_radius_nm,
-            "max_hours": self.max_hours,
-        }
-
-
-@runtime_checkable
-class Router(Protocol):
-    """The routing interface every router implements (Compatibility rule 2).
-
-    ``route(start, finish, start_time) -> Route`` is the entire contract: the
-    Level 1 oracle must be replaceable by an external reference router (a
-    pinned subprocess adapter) without changing the harness. A router is
-    bound to its weather at construction — see the router factory in
-    ``staircase.run_staircase``.
-    """
-
-    def route(
-        self,
-        start: tuple[float, float],
-        finish: tuple[float, float],
-        start_time: float = 0.0,
-    ) -> Route: ...
-
-
-RouterFactory = Callable[[xr.Dataset], Router]
-"""Binds a weather dataset to a Router (Compatibility rule 2).
-
-Defined once here, next to the Router protocol it produces; the harness
-(``staircase``), the episode wrapper (``scenario``) and the oracle adapter
-all share this type. For the oracle, the factory writes the dataset to
-disk and drives the pinned subprocess; for the surrogate, it builds an
-``IsochroneRouter`` in-process.
-"""
 
 
 @dataclass
@@ -127,7 +58,7 @@ class IsochroneRouter:
         config: RouterConfig | None = None,
     ) -> IsochroneRouter:
         """Build the router from the canonical CF weather Dataset."""
-        from .dataset import grid_from_dataset
+        from light_router.dataset import grid_from_dataset
 
         return cls(
             grid=grid_from_dataset(weather),
@@ -348,27 +279,3 @@ class IsochroneRouter:
             eta_hours=start_time,
             distance_nm=0.0,
         )
-
-
-def route_bearing(route: Route) -> float:
-    """Initial bearing of the first sailing leg (deg), NaN for empty routes."""
-    if route.n_waypoints < 2:
-        return float("nan")
-    for i in range(route.n_waypoints - 1):
-        if not np.isnan(route.heading[i + 1]):
-            return float(route.heading[i + 1])
-    return float("nan")
-
-
-def mean_vmg(route: Route, finish: tuple[float, float]) -> float:
-    """Mean velocity-made-good toward the finish (kt)."""
-    if route.n_waypoints < 2:
-        return 0.0
-    total_time = float(route.time[-1] - route.time[0])
-    if total_time <= 0:
-        return 0.0
-    progress = float(
-        great_circle_distance(route.lat[0], route.lon[0], finish[0], finish[1])
-        - great_circle_distance(route.lat[-1], route.lon[-1], finish[0], finish[1])
-    )
-    return progress / total_time

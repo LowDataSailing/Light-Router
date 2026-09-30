@@ -7,8 +7,9 @@ selected forecast hours) and downloads them to a cache directory.
 from __future__ import annotations
 
 import urllib.parse
-import urllib.request
 from pathlib import Path
+
+from light_router.weather_data.downloader import fetch_bytes
 
 NOMADS_FILTER_URL = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs.pl"
 
@@ -66,7 +67,7 @@ def download_gfs_wind(
                 rundate, run_hour, fh, lon_min, lon_max, lat_min, lat_max
             )
             tmp = dest.with_suffix(".part")
-            urllib.request.urlretrieve(url, tmp)
+            tmp.write_bytes(fetch_bytes(url, timeout_s))
             tmp.rename(dest)
         paths.append(dest)
     return paths

@@ -1,12 +1,12 @@
 import numpy as np
 
-from light_router.isochrone import (
+from light_router.routing import (
     IsochroneRouter,
     RouterConfig,
     mean_vmg,
     route_bearing,
 )
-from light_router.polar import synthetic_cruising_polar
+from light_router.models.vessel import synthetic_cruising_polar
 from light_router.synthetic import trade_wind_field
 
 

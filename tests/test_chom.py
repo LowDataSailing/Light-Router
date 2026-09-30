@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from light_router.data import chom
+from light_router.weather_data import chom
 
 
 def fake_response(payload):

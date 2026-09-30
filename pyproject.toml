@@ -84,7 +84,7 @@ packages = ["src/light_router"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-exclude = [".venv", "site", "data/cache", "examples/output"]
+exclude = [".venv", "site", "data/cache", "experiments/output"]
 
 [tool.ruff.lint]
 # mirror the flake8 defaults this repo used before the ruff migration
@@ -92,7 +92,7 @@ select = ["E", "W", "F"]
 
 [tool.pytest.ini_options]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 testpaths = ["tests"]
 
 [tool.mypy]

@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import xarray as xr
 
-from .weather import WeatherGrid
+from light_router.models.weather import WeatherGrid
 
 CF_VARIABLES: dict[str, dict[str, str]] = {
     "u10": {"standard_name": "eastward_wind", "units": "m s-1"},

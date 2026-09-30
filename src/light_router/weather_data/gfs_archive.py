@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import concurrent.futures
 import functools
-import time
-import urllib.error
-import urllib.request
-from collections.abc import Callable
-from typing import TypeVar
 from dataclasses import dataclass
 from pathlib import Path
+
+from light_router.weather_data.downloader import (
+    fetch_range,
+    fetch_text,
+    retry_transient,
+)
 
 ARCHIVE_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 
@@ -88,43 +89,6 @@ def message_byte_range(
     return entry.byte_start, entries[index + 1].byte_start
 
 
-def _fetch_text(url: str, timeout_s: int) -> str:
-    with urllib.request.urlopen(url, timeout=timeout_s) as response:
-        return response.read().decode()
-
-
-def _fetch_range(url: str, start: int, end: int, timeout_s: int) -> bytes:
-    request = urllib.request.Request(url, headers={"Range": f"bytes={start}-{end - 1}"})
-    with urllib.request.urlopen(request, timeout=timeout_s) as response:
-        return response.read()
-
-
-_T = TypeVar("_T")
-
-
-def _retry_transient(
-    fetch: Callable[..., _T], *args: object, max_retries: int = 5
-) -> _T:
-    """Run one HTTP fetch, retrying transient server/network errors.
-
-    The S3 archive occasionally answers a range request with a 5xx or
-    resets the connection; a multi-thousand-file archive fetch must ride
-    those out instead of failing the whole run. Non-5xx HTTP errors (e.g.
-    a genuinely missing file) raise immediately.
-    """
-    for attempt in range(max_retries + 1):
-        try:
-            return fetch(*args)
-        except urllib.error.HTTPError as exc:
-            if exc.code < 500 or attempt >= max_retries:
-                raise
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
-            if attempt >= max_retries:
-                raise
-        time.sleep(min(30.0 * (attempt + 1), 120.0))
-    raise AssertionError("unreachable")
-
-
 def download_gfs_archive_wind(
     rundate: str,
     run_hour: str,
@@ -186,7 +150,7 @@ def _download_hour(
     """Fetch one forecast hour's wind messages into the cache."""
     dest = cache_dir / _cache_name(rundate, run_hour, forecast_hour)
     grib_url, idx_url = gfs_archive_urls(rundate, run_hour, forecast_hour)
-    entries = parse_grib_index(_retry_transient(_fetch_text, idx_url, timeout_s))
+    entries = parse_grib_index(retry_transient(fetch_text, idx_url, timeout_s))
     wanted = [e for e in entries if e.variable in variables and e.level == level]
     if len(wanted) != len(variables):
         raise ValueError(
@@ -197,5 +161,5 @@ def _download_hour(
     with open(tmp, "wb") as out:
         for entry in wanted:
             start, end = message_byte_range(entries, entry)
-            out.write(_retry_transient(_fetch_range, grib_url, start, end, timeout_s))
+            out.write(retry_transient(fetch_range, grib_url, start, end, timeout_s))
     tmp.rename(dest)

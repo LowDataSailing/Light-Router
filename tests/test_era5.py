@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from light_router.data.era5 import (
+from light_router.weather_data.era5 import (
     _grid_from_arrays,
     _hours_since_start,
     era5_url,
@@ -50,11 +50,9 @@ def test_grid_from_arrays_converts_wind():
     assert np.allclose(np.abs(v10[1]), 20.0 / 3.6, atol=1e-4)
 
 
-def test_fetch_retries_on_rate_limit(monkeypatch):
-    """A 429 from the API is retried after Retry-After, not fatal."""
-    import urllib.error
-
-    from light_router.data import era5
+def test_fetch_uses_throttled_downloader(monkeypatch):
+    """The grid fetch goes through the rate-limited downloader, batch by batch."""
+    from light_router.weather_data import era5
 
     payload = [
         {
@@ -70,15 +68,9 @@ def test_fetch_retries_on_rate_limit(monkeypatch):
 
     def fake_fetch(url: str, timeout_s: int) -> object:
         calls.append(url)
-        if len(calls) == 1:
-            raise urllib.error.HTTPError(
-                url, 429, "Too Many Requests", {"Retry-After": "0"}, None
-            )
         return payload
 
-    sleeps: list[float] = []
-    monkeypatch.setattr(era5, "_fetch_json", fake_fetch)
-    monkeypatch.setattr(era5.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(era5, "fetch_json_throttled", fake_fetch)
     ds = era5.fetch_era5_wind_grid(
         np.array([10.0, 10.5]),
         np.array([-20.0, -19.5]),
@@ -87,8 +79,7 @@ def test_fetch_retries_on_rate_limit(monkeypatch):
         batch_size=2,
         pause_s=0.0,
     )
-    assert len(calls) == 3  # 429 + retry, then the second batch
-    assert sleeps == [0.0]  # honored Retry-After
+    assert len(calls) == 2  # one call per batch
     assert dict(ds.sizes) == {"time": 2, "latitude": 2, "longitude": 2}
 
 
@@ -97,7 +88,7 @@ def test_fetch_resumes_from_batch_cache(tmp_path, monkeypatch):
     import hashlib
     import json
 
-    from light_router.data import era5
+    from light_router.weather_data import era5
 
     lats = np.array([10.0, 10.5])
     lons = np.array([-20.0, -19.5])
@@ -127,7 +118,7 @@ def test_fetch_resumes_from_batch_cache(tmp_path, monkeypatch):
         calls.append(url)
         return payload
 
-    monkeypatch.setattr(era5, "_fetch_json", fake_fetch)
+    monkeypatch.setattr(era5, "fetch_json_throttled", fake_fetch)
     ds = era5.fetch_era5_wind_grid(
         lats,
         lons,

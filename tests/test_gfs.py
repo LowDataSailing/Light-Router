@@ -1,4 +1,4 @@
-from light_router.data.gfs import download_gfs_wind, gfs_filter_url
+from light_router.weather_data.gfs import download_gfs_wind, gfs_filter_url
 
 
 def test_url_contains_region_and_variables():
@@ -12,13 +12,12 @@ def test_url_contains_region_and_variables():
 
 
 def test_download_skips_existing(tmp_path, monkeypatch):
+    from light_router.weather_data import gfs
+
     cached = tmp_path / "gfs_2026092600_f000.grib2"
     cached.write_bytes(b"fake grib")
     called = []
-    monkeypatch.setattr(
-        "light_router.data.gfs.urllib.request.urlretrieve",
-        lambda *a, **k: called.append(a),
-    )
+    monkeypatch.setattr(gfs, "fetch_bytes", lambda *a, **k: called.append(a))
     paths = download_gfs_wind(
         "20260926", "00", [0], -27.0, -12.0, 12.0, 32.0, cache_dir=tmp_path
     )

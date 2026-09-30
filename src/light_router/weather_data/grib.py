@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from .dataset import to_cf_dataset
-from .weather import WeatherGrid
+from light_router.dataset import to_cf_dataset
+from light_router.models.weather import WeatherGrid
 
 
 def load_grib_wind(

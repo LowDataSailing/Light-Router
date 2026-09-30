@@ -27,11 +27,11 @@ test: ## Run tests
 	$(UV) run pytest
 
 lint: ## Run linters
-	$(UV) run ruff check src tests examples || true
+	$(UV) run ruff check src tests experiments || true
 	$(UV) run mypy src || true
 
 format: ## Format source code
-	$(UV) run ruff format src tests examples
+	$(UV) run ruff format src tests experiments
 
 ##@ Cleanup
 

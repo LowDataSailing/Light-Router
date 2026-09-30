@@ -27,8 +27,8 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from ..artifacts import git_sha
-from ..simulate import ForecastCycle
+from light_router.models.passage import ForecastCycle
+from light_router.provenance import git_sha
 
 PACK_MANIFEST = "pack.json"
 TRUTH_NAME = "truth.npz"

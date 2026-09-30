@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from light_router.synthetic import trade_wind_field
-from light_router.weather import WeatherGrid, route_grid_box
+from light_router.models.weather import WeatherGrid, route_grid_box
 
 
 def make_grid():

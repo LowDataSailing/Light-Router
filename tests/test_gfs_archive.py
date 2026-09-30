@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from light_router.data.gfs_archive import (
+from light_router.weather_data.gfs_archive import (
     GribIndexEntry,
     download_gfs_archive_wind,
     gfs_archive_urls,
@@ -54,7 +54,7 @@ def test_message_byte_range_last_entry_raises():
 
 
 def test_download_writes_wind_messages(tmp_path, monkeypatch):
-    from light_router.data import gfs_archive
+    from light_router.weather_data import gfs_archive
 
     fetched: list[tuple[str, int, int]] = []
 
@@ -65,8 +65,8 @@ def test_download_writes_wind_messages(tmp_path, monkeypatch):
         fetched.append((url, start, end))
         return b"GRIB" + str(start).encode()
 
-    monkeypatch.setattr(gfs_archive, "_fetch_text", fake_fetch_text)
-    monkeypatch.setattr(gfs_archive, "_fetch_range", fake_fetch_range)
+    monkeypatch.setattr(gfs_archive, "fetch_text", fake_fetch_text)
+    monkeypatch.setattr(gfs_archive, "fetch_range", fake_fetch_range)
 
     paths = download_gfs_archive_wind("20250915", "00", [0, 3], tmp_path)
     assert [p.name for p in paths] == [
@@ -93,38 +93,10 @@ def test_download_writes_wind_messages(tmp_path, monkeypatch):
 
 
 def test_download_missing_variable_raises(tmp_path, monkeypatch):
-    from light_router.data import gfs_archive
+    from light_router.weather_data import gfs_archive
 
     monkeypatch.setattr(
-        gfs_archive, "_fetch_text", lambda url, timeout_s: IDX_TEXT.splitlines()[0]
+        gfs_archive, "fetch_text", lambda url, timeout_s: IDX_TEXT.splitlines()[0]
     )
     with pytest.raises(ValueError, match="matching messages"):
         download_gfs_archive_wind("20250915", "00", [0], tmp_path)
-
-
-def test_retry_transient_rides_out_5xx(monkeypatch):
-    """A transient S3 500 is retried, not fatal; a 404 raises immediately."""
-    import urllib.error
-
-    from light_router.data import gfs_archive
-
-    calls: list[str] = []
-    sleeps: list[float] = []
-    monkeypatch.setattr(gfs_archive.time, "sleep", lambda s: sleeps.append(s))
-
-    def flaky(url, timeout_s):
-        calls.append(url)
-        if len(calls) <= 2:
-            raise urllib.error.HTTPError(url, 500, "Internal Server Error", {}, None)
-        return "ok"
-
-    assert gfs_archive._retry_transient(flaky, "u", 60) == "ok"
-    assert len(calls) == 3
-    assert sleeps == [30.0, 60.0]
-
-    def missing(url, timeout_s):
-        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
-
-    with pytest.raises(urllib.error.HTTPError):
-        gfs_archive._retry_transient(missing, "u", 60)
-    assert len(calls) == 3  # the 404 was not retried

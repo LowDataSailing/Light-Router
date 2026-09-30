@@ -18,18 +18,18 @@ reference is the bandwidth-quality cost, this time with the
 forecast-vs-reality gap a real router experiences.
 
 Usage:
-    uv run python examples/operational_passage.py               # real data
-    uv run python examples/operational_passage.py --artifacts  # + run directory
-    uv run python examples/operational_passage.py --start-date 2025-09-01 \
+    uv run python experiments/operational_passage.py               # real data
+    uv run python experiments/operational_passage.py --artifacts  # + run directory
+    uv run python experiments/operational_passage.py --start-date 2025-09-01 \
         --budgets unlimited,100000,10000,5000,2000,1000
-    uv run python examples/operational_passage.py --export-pack data/packs/ccv
-    uv run python examples/operational_passage.py --pack data/packs/ccv \
+    uv run python experiments/operational_passage.py --export-pack data/packs/ccv
+    uv run python experiments/operational_passage.py --pack data/packs/ccv \
         --artifacts          # rerun offline from the pack, no network/GRIB
-    uv run python examples/operational_passage.py --start 28.0,-15.5 \
+    uv run python experiments/operational_passage.py --start 28.0,-15.5 \
         --finish 14.6,-61.0 --scenario atlantic_canaries_caribbean \
         --start-date 2025-11-15 --days 20 --max-passage-hours 600 \
         --artifacts          # full Atlantic crossing (Canaries -> Martinique)
-    uv run python examples/operational_passage.py --start 14.6,-61.0 \
+    uv run python experiments/operational_passage.py --start 14.6,-61.0 \
         --finish 48.4,-4.8 --scenario atlantic_caribbean_brittany \
         --start-date 2025-03-01 --days 30 --max-passage-hours 700 \
         --margin 2.0 --artifacts  # full Atlantic crossing (Martinique -> Brest)
@@ -53,22 +53,22 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from light_router.artifacts import (  # noqa: E402
+from light_router.reporting.artifacts import (  # noqa: E402
     new_run_dir,
     write_operational_artifacts,
 )
-from light_router.data.era5 import fetch_era5_wind_grid  # noqa: E402
-from light_router.data.gfs_archive import download_gfs_archive_wind  # noqa: E402
-from light_router.data.pack import load_pack, write_pack  # noqa: E402
-from light_router.grib import load_grib_wind  # noqa: E402
-from light_router.isochrone import RouterConfig  # noqa: E402
-from light_router.polar import synthetic_cruising_polar  # noqa: E402
-from light_router.simulate import (  # noqa: E402
+from light_router.weather_data.era5 import fetch_era5_wind_grid  # noqa: E402
+from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
+from light_router.weather_data.pack import load_pack, write_pack  # noqa: E402
+from light_router.weather_data.grib import load_grib_wind  # noqa: E402
+from light_router.routing import RouterConfig  # noqa: E402
+from light_router.models.vessel import synthetic_cruising_polar  # noqa: E402
+from light_router.simulation.simulate import (  # noqa: E402
     ForecastCycle,
     format_operational_summary,
     run_operational_staircase,
 )
-from light_router.weather import route_grid_box  # noqa: E402
+from light_router.models.weather import route_grid_box  # noqa: E402
 
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
 RUNS = Path(__file__).resolve().parents[1] / "runs"

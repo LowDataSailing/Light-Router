@@ -5,10 +5,10 @@ from __future__ import annotations
 import numpy as np
 
 from light_router.dataset import to_cf_dataset
-from light_router.isochrone import Router, RouterConfig
-from light_router.polar import synthetic_cruising_polar
-from light_router.scenario import Scenario, surrogate_router_factory
-from light_router.staircase import STAIRCASE
+from light_router.routing import Router, RouterConfig
+from light_router.models.vessel import synthetic_cruising_polar
+from light_router.simulation.scenario import Scenario, surrogate_router_factory
+from light_router.harness.staircase import STAIRCASE
 from light_router.synthetic import trade_wind_field
 
 START = (28.0, -15.5)

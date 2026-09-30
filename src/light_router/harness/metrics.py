@@ -5,30 +5,13 @@ All metrics are reported separately, never combined into one score.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-
 import numpy as np
 
-from .geo import great_circle_distance
-from .isochrone import Route, mean_vmg, route_bearing
+from light_router.geo import great_circle_distance
+from light_router.models.experiment import RouteMetrics
+from light_router.models.route import Route, mean_vmg, route_bearing
 
 DECISION_SPLIT_DEG = 15.0  # initial-bearing split that counts as a different decision
-
-
-@dataclass
-class RouteMetrics:
-    eta_diff_pct: float
-    distance_diff_pct: float
-    vmg_diff_kt: float
-    max_wind_diff_kt: float
-    decision_divergence: bool
-    initial_bearing_diff_deg: float
-    geographic_divergence_nm: float
-    reached: bool
-
-    def as_dict(self) -> dict[str, object]:
-        """Metrics as a flat dict (one CSV/JSON row)."""
-        return asdict(self)
 
 
 def _max_wind(route: Route) -> float:

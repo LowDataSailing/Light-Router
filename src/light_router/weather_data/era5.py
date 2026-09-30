@@ -16,13 +16,13 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
+
+from light_router.weather_data.downloader import fetch_json_throttled
 
 ERA5_URL = "https://archive-api.open-meteo.com/v1/era5"
 KMH_PER_MS = 3.6
@@ -47,34 +47,6 @@ def era5_url(
         "timezone": "UTC",
     }
     return f"{ERA5_URL}?{urllib.parse.urlencode(params)}"
-
-
-def _fetch_json(url: str, timeout_s: int) -> object:
-    with urllib.request.urlopen(url, timeout=timeout_s) as response:
-        return json.loads(response.read().decode())
-
-
-def _fetch_json_throttled(url: str, timeout_s: int, max_retries: int = 60) -> object:
-    """Fetch one batch, retrying on the API's rate limit (HTTP 429).
-
-    Open-Meteo weights a multi-location request by its location count, so a
-    grid fetch can exceed the per-minute or per-hour call quota; the
-    response's Retry-After header says when the quota resets. Long routes
-    need more calls than one hourly window allows, so retries are patient
-    enough (up to ~60 x 5 min) to bridge an hourly quota reset; a batch
-    cache (see fetch_era5_wind_grid) makes any give-up cheap to resume.
-    """
-    attempt = 0
-    while True:
-        try:
-            return _fetch_json(url, timeout_s)
-        except urllib.error.HTTPError as exc:
-            if exc.code != 429 or attempt >= max_retries:
-                raise
-            retry_after = exc.headers.get("Retry-After") if exc.headers else None
-            wait_s = float(retry_after) if retry_after else 30.0 * (attempt + 1)
-            time.sleep(min(wait_s, 300.0))
-            attempt += 1
 
 
 def _hours_since_start(iso_times: list[str], start_date: str) -> np.ndarray:
@@ -131,7 +103,7 @@ def fetch_era5_wind_grid(
         url = era5_url(
             [p[0] for p in batch], [p[1] for p in batch], start_date, end_date
         )
-        result = _fetch_json_throttled(url, timeout_s)
+        result = fetch_json_throttled(url, timeout_s)
         if not isinstance(result, list):
             raise ValueError(f"ERA5 API error for batch {i}: {result}")
         if batch_path is not None:

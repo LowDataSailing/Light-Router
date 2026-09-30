@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
@@ -19,10 +18,11 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from .dataset import dataset_extent
-from .isochrone import Route, RouterConfig
-from .simulate import PassageResult
-from .staircase import StaircaseResult, budget_label, write_csv
+from light_router.dataset import dataset_extent
+from light_router.harness.staircase import StaircaseResult, budget_label, write_csv
+from light_router.models.passage import PassageResult
+from light_router.models.route import Route, RouterConfig
+from light_router.provenance import git_sha
 
 MANIFEST_NAME = "manifest.json"
 METRICS_NAME = "metrics.csv"
@@ -36,19 +36,6 @@ def _package_version() -> str:
         return pkg_version("light-router")
     except PackageNotFoundError:  # running from a source tree
         return "0.1.0"
-
-
-def git_sha() -> str:
-    """Short commit hash of the working tree, or "unknown" outside git."""
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
 
 
 def grid_checksum(weather: xr.Dataset) -> str:
@@ -148,8 +135,8 @@ def write_artifacts(
     ``routes`` maps a label to a route to export in addition to the staircase
     rows (e.g. the reference route under "reference").
     """
-    from .export import write_route_files
-    from .plots import write_plots
+    from light_router.reporting.export import write_route_files
+    from light_router.reporting.plots import write_plots
 
     write_manifest(
         run_dir,
@@ -230,8 +217,8 @@ def write_operational_artifacts(
     feeds the manifest provenance checksum, the wind snapshot and the plot
     underlay.
     """
-    from .export import write_route_files
-    from .plots import write_operational_plots
+    from light_router.reporting.export import write_route_files
+    from light_router.reporting.plots import write_operational_plots
 
     write_manifest(
         run_dir,

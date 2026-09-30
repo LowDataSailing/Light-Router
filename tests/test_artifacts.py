@@ -11,7 +11,7 @@ import json
 import numpy as np
 import pytest
 
-from light_router.artifacts import (
+from light_router.reporting.artifacts import (
     MANIFEST_NAME,
     METRICS_NAME,
     budget_slug,
@@ -21,10 +21,10 @@ from light_router.artifacts import (
     write_artifacts,
 )
 from light_router.dataset import to_cf_dataset
-from light_router.isochrone import RouterConfig
-from light_router.polar import synthetic_cruising_polar
-from light_router.scenario import surrogate_router_factory
-from light_router.staircase import run_staircase
+from light_router.routing import RouterConfig
+from light_router.models.vessel import synthetic_cruising_polar
+from light_router.simulation.scenario import surrogate_router_factory
+from light_router.harness.staircase import run_staircase
 from light_router.synthetic import add_storm, trade_wind_field
 
 START = (28.0, -15.5)
@@ -193,7 +193,7 @@ def test_plots_written(run_dir):
 
 def test_summarize_rerenders(run_dir, capsys):
     pytest.importorskip("matplotlib")
-    from light_router.summarize import summarize
+    from light_router.reporting.summarize import summarize
 
     # plots exist from write_artifacts; remove one to prove re-render
     (run_dir / "plot_degradation.png").unlink()
@@ -205,7 +205,7 @@ def test_summarize_rerenders(run_dir, capsys):
 
 
 def test_summarize_cli_errors(tmp_path, capsys):
-    from light_router.summarize import main
+    from light_router.reporting.summarize import main
 
     assert main([str(tmp_path / "nope")]) == 1
     assert main([]) == 2

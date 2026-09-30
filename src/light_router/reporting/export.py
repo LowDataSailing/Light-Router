@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .isochrone import Route
+from light_router.routing import Route
 
 
 def _require_gpxpy():

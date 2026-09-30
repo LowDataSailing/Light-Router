@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .weather import WeatherGrid
+from light_router.models.weather import WeatherGrid
 
 
 def trade_wind_field(

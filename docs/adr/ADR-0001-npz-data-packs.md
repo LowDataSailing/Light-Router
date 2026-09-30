@@ -20,7 +20,7 @@ that is otherwise numpy + xarray only, for a few tens of MB of data.
 Goal 1 experiment inputs are stored as **data packs**: plain
 directories of zlib-compressed `.npz` files (one per grid) plus a
 `pack.json` manifest with sha256 checksums per file, written and
-verified by `light_router.data.pack` (`--export-pack` / `--pack`).
+verified by `light_router.weather_data.pack` (`--export-pack` / `--pack`).
 Packs are self-contained: a rerun from a pack needs no network and no
 GRIB toolchain, and checksum verification on load is the provenance
 check.

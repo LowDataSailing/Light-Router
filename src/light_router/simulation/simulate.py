@@ -20,79 +20,17 @@ the unlimited-data reference is the reward.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import numpy as np
 import xarray as xr
 
-from .dataset import grid_from_dataset, to_cf_dataset
-from .degrade import DegradeConfig, best_config_for_budget, degrade, package_size
-from .geo import destination, great_circle_distance, initial_bearing
-from .isochrone import Route, RouterConfig
-from .polar import PolarTable
-from .scenario import surrogate_router_factory
-from .staircase import budget_label
-
-
-@dataclass
-class ForecastCycle:
-    """One GFS run available to the router during the passage.
-
-    init_hour: run initialization, in absolute hours since passage start.
-    weather: the run's forecast as a CF Dataset, time = lead hours since
-    its own initialization.
-    """
-
-    init_hour: float
-    weather: xr.Dataset
-
-
-@dataclass
-class CycleRecord:
-    """What the router received and planned at one planning cycle."""
-
-    hour: float  # absolute cycle time
-    config: DegradeConfig | None  # None = budget unreachable even fully degraded
-    package_bytes: int
-    plan_reached: bool
-    planned_arrival_hour: float | None  # absolute, as believed at cycle time
-
-
-@dataclass
-class PassageResult:
-    """The actual passage as it happened on the measured weather."""
-
-    lat: np.ndarray
-    lon: np.ndarray
-    time: np.ndarray  # absolute hours since passage start
-    heading: np.ndarray
-    speed: np.ndarray  # kt achieved on the true wind
-    tws: np.ndarray  # true wind speed experienced (kt)
-    twa: np.ndarray  # true wind angle experienced (deg)
-    reached: bool
-    passage_hours: float
-    distance_nm: float
-    budget_bytes: int | None
-    cycles: list[CycleRecord] = field(repr=False, compare=False)
-
-    @property
-    def total_package_bytes(self) -> int:
-        return sum(record.package_bytes for record in self.cycles)
-
-    def as_route(self) -> Route:
-        """The actual track as a Route, for export (GPX/GeoJSON) and plots."""
-        return Route(
-            lat=self.lat,
-            lon=self.lon,
-            time=self.time,
-            heading=self.heading,
-            speed=self.speed,
-            tws=self.tws,
-            twa=self.twa,
-            reached=self.reached,
-            eta_hours=self.passage_hours if self.reached else float("nan"),
-            distance_nm=self.distance_nm,
-        )
+from light_router.dataset import grid_from_dataset, to_cf_dataset
+from light_router.geo import destination, great_circle_distance, initial_bearing
+from light_router.harness.degrade import best_config_for_budget, degrade, package_size
+from light_router.harness.staircase import budget_label
+from light_router.models.passage import CycleRecord, ForecastCycle, PassageResult
+from light_router.models.route import Route, RouterConfig
+from light_router.models.vessel import PolarTable
+from light_router.simulation.scenario import surrogate_router_factory
 
 
 def simulate_passage(

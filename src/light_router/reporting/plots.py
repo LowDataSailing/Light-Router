@@ -15,9 +15,9 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from .isochrone import Route
-from .simulate import PassageResult
-from .staircase import StaircaseResult
+from light_router.routing import Route
+from light_router.simulation.simulate import PassageResult
+from light_router.harness.staircase import StaircaseResult
 
 
 def _require_pyplot():
@@ -194,7 +194,7 @@ def write_operational_plots(
     run_dir: Path, results: list[PassageResult], truth: xr.Dataset
 ) -> None:
     """Write the operational charts: actual tracks on the truth wind, budget curve."""
-    from .staircase import budget_label
+    from light_router.harness.staircase import budget_label
 
     tracks = {budget_label(r.budget_bytes): r.as_route() for r in results}
     plot_tracks(

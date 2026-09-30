@@ -40,7 +40,7 @@ NOAA AWS S3 (archived GFS GRIB2)   NOMADS (current runs)   CHOM/InfoClimat (obse
   (climatology, not forecasts — verified 2026-09-27).
 - **Format:** GRIB2 on disk, cached under `data/cache/` (content-addressed by
   run date + region).
-- **Techno:** boto3 / plain HTTPS, `light_router.data` loaders.
+- **Techno:** boto3 / plain HTTPS, `light_router.weather_data` loaders.
 - **Idea:** reanalysis is *not* a forecast — the archive must be forecasts as
   originally issued (Dataset Construction).
 

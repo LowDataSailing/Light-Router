@@ -12,30 +12,11 @@ from __future__ import annotations
 
 import json
 import zlib
-from dataclasses import dataclass
 
 import numpy as np
 
-from .weather import WeatherGrid
-
-WIND_VARIABLES = ("u10", "v10")
-
-
-@dataclass(frozen=True)
-class DegradeConfig:
-    spatial_stride: int = 1
-    temporal_stride: int = 1
-    bits: int = 16
-    keep_variables: tuple[str, ...] = WIND_VARIABLES
-
-    def fidelity_score(self) -> tuple[float, ...]:
-        """Higher is better: prefer small strides and many bits.
-
-        Lexicographic priority — spatial resolution first (routing decisions
-        are local), then temporal resolution, then bits. A deliberate total
-        order over "highest-fidelity", documented in the spec (§5).
-        """
-        return (1.0 / self.spatial_stride, 1.0 / self.temporal_stride, self.bits / 32.0)
+from light_router.models.degradation import DegradeConfig
+from light_router.models.weather import WeatherGrid
 
 
 def degrade(grid: WeatherGrid, config: DegradeConfig) -> WeatherGrid:

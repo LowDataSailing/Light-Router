@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from light_router.degrade import (
+from light_router.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,
     candidate_configs,

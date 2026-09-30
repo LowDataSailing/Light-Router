@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 
 import xarray as xr
 
-from .isochrone import IsochroneRouter, Router, RouterConfig, RouterFactory
-from .polar import PolarTable
-from .staircase import STAIRCASE, StaircaseResult, run_staircase
+from light_router.routing import IsochroneRouter, Router, RouterConfig, RouterFactory
+from light_router.models.vessel import PolarTable
+from light_router.harness.staircase import STAIRCASE, StaircaseResult, run_staircase
 
 
 @dataclass

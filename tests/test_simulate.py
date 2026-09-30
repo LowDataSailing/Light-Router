@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 
 from light_router.dataset import to_cf_dataset
-from light_router.isochrone import RouterConfig
-from light_router.polar import synthetic_cruising_polar
-from light_router.simulate import (
+from light_router.routing import RouterConfig
+from light_router.models.vessel import synthetic_cruising_polar
+from light_router.simulation.simulate import (
     ForecastCycle,
     format_operational_summary,
     run_operational_staircase,

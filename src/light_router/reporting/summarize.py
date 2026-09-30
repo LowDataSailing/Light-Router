@@ -1,8 +1,8 @@
 """Re-render comparisons from an existing run directory.
 
-``python -m light_router.summarize <run_dir>`` reads manifest.json, metrics.csv
-and the exported GPX routes, re-renders the plots and prints the summary
-table — without re-running the router. Same inputs produce the same artifact
+``python -m light_router.reporting.summarize <run_dir>`` reads manifest.json,
+metrics.csv and the exported GPX routes, re-renders the plots and prints the
+summary table — without re-running the router. Same inputs produce the same artifact
 content.
 """
 
@@ -16,12 +16,20 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from .artifacts import MANIFEST_NAME, METRICS_NAME, WIND_SNAPSHOT_NAME
-from .export import read_routes
-from .isochrone import Route
-from .plots import plot_degradation, plot_size_fidelity, plot_tracks
-from .staircase import StaircaseRow
-from .metrics import RouteMetrics
+from light_router.reporting.artifacts import (
+    MANIFEST_NAME,
+    METRICS_NAME,
+    WIND_SNAPSHOT_NAME,
+)
+from light_router.reporting.export import read_routes
+from light_router.routing import Route
+from light_router.reporting.plots import (
+    plot_degradation,
+    plot_size_fidelity,
+    plot_tracks,
+)
+from light_router.harness.staircase import StaircaseRow
+from light_router.harness.metrics import RouteMetrics
 
 
 def _empty_route() -> Route:
@@ -140,7 +148,7 @@ def summarize(run_dir: Path) -> Path:
     routes = _routes_from_gpx(run_dir)
     grid = _wind_snapshot(run_dir)
 
-    from .staircase import StaircaseResult
+    from light_router.harness.staircase import StaircaseResult
 
     result = StaircaseResult(
         rows=rows, reference=routes.get("reference", _empty_route())
@@ -153,7 +161,7 @@ def summarize(run_dir: Path) -> Path:
     print(f"scenario: {manifest['scenario']}")
     checksum = manifest["data_checksum"][:12]
     print(f"code version: {manifest['code_version']}  data checksum: {checksum}...")
-    from .staircase import format_summary
+    from light_router.harness.staircase import format_summary
 
     print(format_summary(rows))
     print(f"\nre-rendered plots in {run_dir}")
@@ -161,10 +169,13 @@ def summarize(run_dir: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``python -m light_router.summarize <run_dir>``."""
+    """CLI entry point: ``python -m light_router.reporting.summarize <run_dir>``."""
     argv = argv if argv is not None else sys.argv[1:]
     if len(argv) != 1:
-        print("usage: python -m light_router.summarize <run_dir>", file=sys.stderr)
+        print(
+            "usage: python -m light_router.reporting.summarize <run_dir>",
+            file=sys.stderr,
+        )
         return 2
     run_dir = Path(argv[0])
     if not (run_dir / MANIFEST_NAME).exists():
