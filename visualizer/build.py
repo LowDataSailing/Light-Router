@@ -104,6 +104,7 @@ def export_wind(pack_dir: Path, out_dir: Path, frame_hours: float, grid_stride: 
         fields[name] = np.round(data, 1)
 
     wind = {
+        "source": "pack",
         "frame_hours": float(time[t_idx[1]] - time[t_idx[0]]) if len(t_idx) > 1 else frame_hours,
         "times_h": [round(float(t), 1) for t in time[t_idx]],
         "lats": [round(float(v), 3) for v in lat[::grid_stride]],
@@ -114,8 +115,44 @@ def export_wind(pack_dir: Path, out_dir: Path, frame_hours: float, grid_stride: 
     write_json(out_dir / "wind.json", wind)
     return {
         "file": "wind.json",
+        "source": "pack",
         "frame_hours": wind["frame_hours"],
         "n_frames": len(wind["times_h"]),
+        "grid": [len(wind["lats"]), len(wind["lons"])],
+    }
+
+
+def export_wind_snapshot(run_dir: Path, out_dir: Path, grid_stride: int) -> dict:
+    """Fallback: the run's frozen t=0 ``wind_snapshot.npz`` as a 1-frame field.
+
+    Same rendering as the pack truth, but it does not evolve with the
+    timeline (the same limitation as the artifacts' plot underlay).
+    """
+    snap = np.load(run_dir / "wind_snapshot.npz")
+    lat = np.asarray(snap["lats"], dtype=float)[::grid_stride]
+    lon = np.asarray(snap["lons"], dtype=float)[::grid_stride]
+    fields = {}
+    for name in WIND_VARIABLES:
+        if name not in snap:
+            raise SystemExit(f"{run_dir} wind_snapshot.npz missing {name}")
+        data = np.asarray(snap[name], dtype=np.float32)[::grid_stride, ::grid_stride]
+        fields[name] = np.round(data, 1)
+
+    wind = {
+        "source": "snapshot",
+        "frame_hours": None,
+        "times_h": [0.0],
+        "lats": [round(float(v), 3) for v in lat],
+        "lons": [round(float(v), 3) for v in lon],
+        "u": [fields["u10"].tolist()],
+        "v": [fields["v10"].tolist()],
+    }
+    write_json(out_dir / "wind.json", wind)
+    return {
+        "file": "wind.json",
+        "source": "snapshot",
+        "frame_hours": None,
+        "n_frames": 1,
         "grid": [len(wind["lats"]), len(wind["lons"])],
     }
 
@@ -159,8 +196,14 @@ def export_run(run_dir: Path, out_dir: Path, packs_dir: Path, frame_hours: float
             print(f"  wind: {wind['n_frames']} frames from {pack_dir.name}")
         except Exception as exc:  # noqa: BLE001 - wind is optional, never fatal
             print(f"  wind unavailable: {exc}", file=sys.stderr)
-    else:
-        print("  wind unavailable: no matching data pack")
+    if wind is None and (run_dir / "wind_snapshot.npz").exists():
+        try:
+            wind = export_wind_snapshot(run_dir, run_out, grid_stride)
+            print(f"  wind: frozen t=0 snapshot ({wind['grid'][0]}x{wind['grid'][1]})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  wind snapshot unavailable: {exc}", file=sys.stderr)
+    if wind is None:
+        print("  wind unavailable: no data pack, no snapshot", file=sys.stderr)
 
     run_index = {
         "manifest": manifest,
@@ -181,6 +224,7 @@ def export_run(run_dir: Path, out_dir: Path, packs_dir: Path, frame_hours: float
         "start": manifest.get("route", {}).get("start"),
         "finish": manifest.get("route", {}).get("finish"),
         "has_wind": wind is not None,
+        "wind_source": (wind or {}).get("source"),
         "tracks": tracks,
         "path": f"{manifest['scenario']}/{run_dir.name}/",
     }
@@ -197,7 +241,7 @@ def write_experiments_index(out_dir: Path, entries: list[dict]) -> None:
             f"<a class='card' href='{e['path']}'>"
             f"<h2>{e['scenario']} <span class='run-id'>{e['run']}</span></h2>"
             f"<p class='meta'>{e['created_at']} · code {e['code_version']} · {e['source_type']}"
-            f"{' · wind' if e['has_wind'] else ' · no wind'}</p>"
+            f"{' · wind' if e['wind_source'] == 'pack' else (' · wind (frozen t=0)' if e['has_wind'] else ' · no wind')}</p>"
             f"<p class='budgets'>{budgets}</p></a>"
         )
     html = (

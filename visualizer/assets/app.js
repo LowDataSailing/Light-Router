@@ -105,26 +105,18 @@
       '" stroke="#0b0f14" stroke-width="1"/></svg>';
   }
 
-  function windColor(kt) {
-    // calm blue -> green -> yellow -> red
-    var stops = [
-      [0, [58, 110, 165]],
-      [10, [90, 170, 120]],
-      [20, [235, 213, 79]],
-      [30, [229, 115, 115]],
+  /* Blues-style ramp for the filled speed field (matches the artifacts'
+   * contourf underlay: dark blue calm -> bright blue strong). */
+  var WIND_MAX_MS = 25;
+
+  function windFill(ms) {
+    var t = Math.min(ms / WIND_MAX_MS, 1);
+    return [
+      Math.round(lerp(30, 90, t)),   // r
+      Math.round(lerp(90, 200, t)), // g
+      Math.round(lerp(170, 240, t)), // b
+      Math.round(lerp(70, 175, t)), // alpha (0.27 -> 0.69)
     ];
-    var c = stops[0][1];
-    for (var s = 0; s < stops.length - 1; s++) {
-      if (kt >= stops[s][0] && kt <= stops[s + 1][0]) {
-        var f = (kt - stops[s][0]) / (stops[s + 1][0] - stops[s][0]);
-        c = stops[s][1].map(function (v, i) {
-          return Math.round(lerp(v, stops[s + 1][1][i], f));
-        });
-        break;
-      }
-      if (kt > stops[s + 1][0]) c = stops[s + 1][1];
-    }
-    return "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0.75)";
   }
 
   function App() {
@@ -222,14 +214,50 @@
       });
     });
 
-    this.canvas = document.getElementById("wind-canvas");
-    this.ctx = this.canvas.getContext("2d");
+    // Wind rendering: a filled speed field UNDER the traces (like the
+    // artifacts' contourf underlay) and quiver arrows above them, both
+    // as canvases in custom Leaflet panes so they pan/zoom with the map.
+    this.fieldCanvas = this.makeWindPane("windfield", 350);
+    this.arrowCanvas = this.makeWindPane("windarrows", 450);
+    this.fieldCtx = this.fieldCanvas.getContext("2d");
+    this.arrowCtx = this.arrowCanvas.getContext("2d");
+
     var redraw = function () { self.drawWind(); };
-    map.on("move zoom resize", redraw);
+    map.on("move zoom resize viewreset", redraw);
     window.addEventListener("resize", redraw);
 
     // Re-apply rotation after Leaflet re-creates marker elements.
     map.on("zoomend", function () { self.renderFrame(); });
+  };
+
+  /* A canvas inside a custom map pane at the given z-index
+   * (tile pane is 200, overlay/traces 400, markers 600). */
+  App.prototype.makeWindPane = function (name, zIndex) {
+    var pane = this.map.createPane(name);
+    pane.style.zIndex = String(zIndex);
+    pane.style.pointerEvents = "none";
+    var canvas = document.createElement("canvas");
+    canvas.style.pointerEvents = "none";
+    pane.appendChild(canvas);
+    return canvas;
+  };
+
+  /* Keep the overlay canvases pinned to the current view. */
+  App.prototype.positionWindCanvases = function () {
+    var size = this.map.getSize();
+    var dpr = window.devicePixelRatio || 1;
+    var topLeft = this.map.containerPointToLayerPoint([0, 0]);
+    var self = this;
+    [this.fieldCanvas, this.arrowCanvas].forEach(function (c) {
+      var w = Math.round(size.x * dpr), h = Math.round(size.y * dpr);
+      if (c.width !== w || c.height !== h) {
+        c.width = w;
+        c.height = h;
+      }
+      c.style.width = size.x + "px";
+      c.style.height = size.y + "px";
+      L.DomUtil.setPosition(c, topLeft);
+    });
   };
 
   App.prototype.setupTimeline = function () {
@@ -296,10 +324,17 @@
       windToggle.checked = false;
       windToggle.disabled = true;
       windToggle.parentNode.appendChild(
-        document.createTextNode(" (no truth pack for this run)"));
+        document.createTextNode(" (no truth field for this run)"));
+      document.getElementById("wind-legend").style.display = "none";
+    } else if (this.wind.source === "snapshot") {
+      windToggle.parentNode.appendChild(
+        document.createTextNode(" (frozen t=0 — no evolving pack)"));
     }
     windToggle.addEventListener("change", function () {
-      self.canvas.style.display = windToggle.checked ? "" : "none";
+      var show = windToggle.checked ? "" : "none";
+      self.fieldCanvas.style.display = show;
+      self.arrowCanvas.style.display = show;
+      self.drawWind();
     });
 
     var m = this.run.manifest;
@@ -397,22 +432,11 @@
   };
 
   /* Wind arrows: one per grid cell, pointing along the flow, colored by speed. */
+  /* Truth wind, artifacts style: a filled, smoothed speed field
+   * (contourf-like) under the traces, quiver arrows above them. */
   App.prototype.drawWind = function () {
-    var canvas = this.canvas;
-    var ctx = this.ctx;
-    if (!canvas || !this.wind || canvas.style.display === "none") {
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    var rect = canvas.parentNode.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
-    if (canvas.width !== Math.round(rect.width * dpr) ||
-        canvas.height !== Math.round(rect.height * dpr)) {
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, rect.width, rect.height);
+    if (!this.fieldCanvas || !this.wind) return;
+    if (this.fieldCanvas.style.display === "none") return;
 
     var t = this.frames[this.frame];
     var times = this.wind.times_h;
@@ -423,39 +447,84 @@
     var u = this.wind.u[fi], v = this.wind.v[fi];
     if (!u) return;
     var lats = this.wind.lats, lons = this.wind.lons;
+    var nlat = lats.length, nlon = lons.length;
 
-    for (var r = 0; r < lats.length; r++) {
-      for (var c = 0; c < lons.length; c++) {
-        var uu = u[r][c], vv = v[r][c];
-        if (uu === null || vv === null) continue;
-        var pt = this.map.latLngToContainerPoint([lats[r], lons[c]]);
-        if (pt.x < -30 || pt.y < -30 || pt.x > rect.width + 30 || pt.y > rect.height + 30) continue;
+    this.positionWindCanvases();
+    var dpr = window.devicePixelRatio || 1;
+    var size = this.map.getSize();
 
-        var speedKt = Math.hypot(uu, vv) * MS_PER_KT;
-        if (speedKt < 0.5) continue;
-        var ang = Math.atan2(-vv, uu); // screen coords: y is down
-        var len = Math.min(6 + speedKt * 0.9, 26);
+    // --- filled speed field: one pixel per grid cell, scaled up with
+    //     smoothing so it reads as a continuous contourf-like surface.
+    if (!this.fieldImage) {
+      this.fieldImage = document.createElement("canvas");
+    }
+    var fc = this.fieldImage;
+    if (fc.width !== nlon || fc.height !== nlat) {
+      fc.width = nlon;
+      fc.height = nlat;
+    }
+    var fctx = fc.getContext("2d");
+    var img = fctx.createImageData(nlon, nlat);
+    for (var r = 0; r < nlat; r++) {
+      var row = nlat - 1 - r; // ImageData row 0 is the northernmost
+      for (var c = 0; c < nlon; c++) {
+        var uu = u[row][c], vv = v[row][c];
+        var px = (r * nlon + c) * 4;
+        if (uu === null || vv === null) {
+          img.data[px + 3] = 0;
+          continue;
+        }
+        var col = windFill(Math.hypot(uu, vv));
+        img.data[px] = col[0];
+        img.data[px + 1] = col[1];
+        img.data[px + 2] = col[2];
+        img.data[px + 3] = col[3];
+      }
+    }
+    fctx.putImageData(img, 0, 0);
 
+    var ctx = this.fieldCtx;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+    var tl = this.map.latLngToLayerPoint([lats[nlat - 1], lons[0]]);
+    var br = this.map.latLngToLayerPoint([lats[0], lons[nlon - 1]]);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(fc, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+
+    // --- quiver arrows on top (uniform, like the artifacts' quiver).
+    var actx = this.arrowCtx;
+    actx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    actx.clearRect(0, 0, size.x, size.y);
+    actx.strokeStyle = "rgba(255,255,255,0.6)";
+    actx.lineWidth = 1.2;
+    actx.beginPath();
+    for (var r2 = 0; r2 < nlat; r2++) {
+      for (var c2 = 0; c2 < nlon; c2++) {
+        var u2 = u[r2][c2], v2 = v[r2][c2];
+        if (u2 === null || v2 === null) continue;
+        var speedKt = Math.hypot(u2, v2) * MS_PER_KT;
+        if (speedKt < 1) continue;
+        var pt = this.map.latLngToLayerPoint([lats[r2], lons[c2]]);
+        if (pt.x < -30 || pt.y < -30 || pt.x > size.x + 30 || pt.y > size.y + 30) continue;
+
+        var ang = Math.atan2(-v2, u2); // screen coords: y is down
+        var len = Math.min(8 + speedKt * 0.8, 24);
         var x1 = pt.x - Math.cos(ang) * len / 2;
         var y1 = pt.y - Math.sin(ang) * len / 2;
         var x2 = pt.x + Math.cos(ang) * len / 2;
         var y2 = pt.y + Math.sin(ang) * len / 2;
-
-        ctx.strokeStyle = windColor(speedKt);
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        // arrowhead
+        actx.moveTo(x1, y1);
+        actx.lineTo(x2, y2);
         var head = 5;
         var a1 = ang + 2.6, a2 = ang - 2.6;
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - Math.cos(a1) * head, y2 - Math.sin(a1) * head);
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - Math.cos(a2) * head, y2 - Math.sin(a2) * head);
-        ctx.stroke();
+        actx.moveTo(x2, y2);
+        actx.lineTo(x2 - Math.cos(a1) * head, y2 - Math.sin(a1) * head);
+        actx.moveTo(x2, y2);
+        actx.lineTo(x2 - Math.cos(a2) * head, y2 - Math.sin(a2) * head);
       }
     }
+    actx.stroke();
   };
 
   window.addEventListener("DOMContentLoaded", function () {

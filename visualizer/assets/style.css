@@ -35,11 +35,19 @@ main { flex: 1; display: flex; min-height: 0; }
 
 #map-wrap { flex: 1; position: relative; min-width: 0; }
 #map { position: absolute; inset: 0; background: #0b0f14; }
-#wind-canvas {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 450; /* above leaflet tile pane (400), below markers (600) */
+
+#wind-legend { margin: 0.4rem 0 0.6rem; }
+#wind-legend-bar {
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(to right,
+    rgba(30, 90, 170, 0.25), rgba(90, 200, 240, 0.75));
+}
+#wind-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--muted);
 }
 
 #panel {
