@@ -30,3 +30,11 @@ map tiles). On pascal there is a docker wrapper:
 which serves `dist/` on the shared `ingress` network as `lightrouter-viz`,
 proxied by the gateway at `light-router.pascal-internet.duckdns.org` behind
 authentik (gateway conf: `light-router.conf` in the gateway's nginx conf.d).
+
+## Keeping it fresh
+
+The site is static, so new runs under `runs/` only appear after a rebuild.
+On pascal a systemd timer (`lightrouter-viz-build.timer`, every 15 min,
+niced with idle I/O per the server rules) re-runs `build.py` as `hke`;
+the container bind-mounts `dist/`, so no restart is needed. Manually:
+`make viz-build`.
