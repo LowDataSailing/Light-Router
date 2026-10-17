@@ -1,4 +1,4 @@
-.PHONY: help docs-serve docs-build docs-clean sync test lint format clean
+.PHONY: help docs-serve docs-build docs-clean sync test lint format clean viz-build viz-up viz-down
 
 UV ?= uv
 
@@ -32,6 +32,17 @@ lint: ## Run linters
 
 format: ## Format source code
 	$(UV) run ruff format src tests experiments
+
+##@ Visualizer
+
+viz-build: ## Generate the static visualizer site into visualizer/dist
+	$(UV) run python visualizer/build.py
+
+viz-up: ## Serve the visualizer in docker (pascal: behind the gateway + authentik)
+	docker compose -f visualizer/docker-compose.yml up -d --build
+
+viz-down: ## Stop the visualizer container
+	docker compose -f visualizer/docker-compose.yml down
 
 ##@ Cleanup
 

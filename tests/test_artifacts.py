@@ -173,6 +173,50 @@ def test_geojson_structure(run_dir):
     assert len(feature["points"]) == len(coords)
 
 
+# --- issue #23: no bare NaN tokens in exported GeoJSON ------------------------
+
+
+def test_geojson_strict_parse(run_dir):
+    """Exported GeoJSON must parse with a strict JSON parser.
+
+    Waypoint 0 is NaN-padded by convention; bare NaN tokens are invalid
+    JSON (browsers, jq reject them), so they must serialize as null.
+    """
+
+    def reject(constant):
+        raise ValueError(f"bare {constant} token")
+
+    text = (run_dir / "route_reference.geojson").read_text()
+    feature = json.loads(text, parse_constant=reject)
+    assert feature["points"][0]["heading_deg"] is None
+
+
+def test_geojson_unreached_route_exports_nulls():
+    """An unreached route (NaN eta/distance, NaN-padded start) exports nulls."""
+    from experiments.reporting.export import route_to_geojson
+    from light_router.models.route import Route
+
+    nan = float("nan")
+    route = Route(
+        lat=np.array([28.0, 27.0]),
+        lon=np.array([-15.5, -16.0]),
+        time=np.array([0.0, 4.0]),
+        heading=np.array([nan, 180.0]),
+        speed=np.array([nan, 6.0]),
+        tws=np.array([nan, 15.0]),
+        twa=np.array([nan, 90.0]),
+        reached=False,
+        eta_hours=nan,
+        distance_nm=nan,
+    )
+    feature = route_to_geojson(route, "unreached")
+    assert feature["properties"]["eta_hours"] is None
+    assert feature["properties"]["distance_nm"] is None
+    assert feature["points"][0]["speed_kt"] is None
+    assert feature["points"][1]["speed_kt"] == 6.0
+    json.dumps(feature, allow_nan=False)
+
+
 # --- ticket #8: plots ---------------------------------------------------------
 
 
