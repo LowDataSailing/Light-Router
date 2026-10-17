@@ -79,8 +79,13 @@ Thumbs.db
 !README.md
 !LICENSE
 !AGENTS.md
+!CODING_STANDARDS.md
 !docs/*.md
-!docs/agents/*.md
+!docs/adr/*.md
+!specs/*.md
+!CONTRIBUTING.md
+!agents/*.md
+!research/*.md
 
 # Temporary files
 *.tmp
@@ -91,3 +96,9 @@ site/
 *.js
 *.min.js
 *.min.css
+
+# Goal 1 prototype artifacts
+data/cache/
+experiments/output/*
+runs/
+data/packs/

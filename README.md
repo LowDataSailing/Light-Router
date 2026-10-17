@@ -25,7 +25,14 @@ make docs-serve
 
 ```
 Light-Router/
-├── docs/              # Research and architectural documentation
+├── src/light_router/  # the library (the router stack): models, routing,
+│                      # weather_data — what would run on a boat
+├── experiments/       # the virtual world: harness, simulation, reporting,
+│                      # synthetic fixtures, and the experiment drivers
+├── tests/             # pytest suite
+├── docs/              # user-facing documentation site (mkdocs)
+├── research/          # internal research notes
+├── specs/             # working mirrors of the collective specs
 ├── Makefile           # Task runner (uv-based)
 └── pyproject.toml     # Dependencies and project config
 ```
@@ -35,10 +42,10 @@ Light-Router/
 Full documentation: [https://lowdatasailing.github.io/Light-Router/](https://lowdatasailing.github.io/Light-Router/)
 
 Key documents:
-- [Project Description](docs/PROJECT_DESCRIPTION.md)
-- [Objectives](docs/objectives.md)
-- [Research Ideas](docs/research-ideas.md)
-- [Literature Review](docs/literature-review.md)
+- [Project Description](research/PROJECT_DESCRIPTION.md)
+- [Objectives](research/objectives.md)
+- [Research Ideas](research/research-ideas.md)
+- [Literature Review](research/literature-review.md)
 - [Weather Data Transfer](docs/meteorological-info-transfer.md)
 - [Routing Algorithms](docs/routing-algorithms.md)
 - [Benchmarking Methodology](docs/benchmarking.md)

@@ -27,11 +27,11 @@ test: ## Run tests
 	$(UV) run pytest
 
 lint: ## Run linters
-	$(UV) run flake8 src tests || true
+	$(UV) run ruff check src tests experiments || true
 	$(UV) run mypy src || true
 
 format: ## Format source code
-	$(UV) run black src tests
+	$(UV) run ruff format src tests experiments
 
 ##@ Cleanup
 
