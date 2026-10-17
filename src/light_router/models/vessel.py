@@ -2,8 +2,9 @@
 
 Compatibility rule 5: polars load from industry-standard polar files
 (OpenCPN-compatible CSV — first row = TWS values, first column = TWA
-values, cells = boat speed in knots). The synthetic cruising polar is a
-test fixture, not a research input.
+values, cells = boat speed in knots). The synthetic placeholder polar
+lives in ``experiments/synthetic_polar.py`` (experiment data, not library
+code).
 """
 
 from __future__ import annotations
@@ -45,8 +46,13 @@ class PolarTable:
     ) -> np.ndarray | float:
         """Boat speed (kt) at the given true wind speed (kt) and angle (deg).
 
-        TWA is the absolute angle between heading and wind direction; the table
-        is symmetric across the wind (tack/gybe mirror).
+        Interpolates — never extrapolates — from the table: the speed is
+        bilinearly interpolated between the four cells surrounding the
+        (tws, twa) query. TWA is first folded to [0, 180]: the table is
+        symmetric across the wind (tack/gybe mirror), so 270 deg and 90 deg
+        give the same speed. Queries outside the table's range are clamped
+        to the nearest edge and the edge speed is held there (e.g. a 45 kt
+        gust returns the 40 kt column, not an extrapolated value).
         """
         tws_arr = np.asarray(tws, dtype=float)
         twa_arr = np.abs(np.asarray(twa, dtype=float)) % 360.0
@@ -106,26 +112,3 @@ class PolarTable:
             writer.writerow(["TWA\\TWS"] + [f"{v:g}" for v in self.tws])
             for j, angle in enumerate(self.twa):
                 writer.writerow([f"{angle:g}"] + [f"{v:g}" for v in self.speed[:, j]])
-
-
-def synthetic_cruising_polar() -> PolarTable:
-    """Placeholder polar for a generic 40-ft cruising monohull.
-
-    Decision #12 (polar source: synthetic vs OpenCPN library) is still open;
-    this table is a documented synthetic stand-in shaped like a typical
-    cruiser: no-go below ~40 deg TWA, best speed at ~100-120 deg TWA,
-    hull speed plateau around 7.5 kt.
-    """
-    tws = np.array([0.0, 4.0, 6.0, 8.0, 10.0, 13.0, 16.0, 20.0, 25.0, 30.0, 40.0])
-    twa = np.array(
-        [0.0, 30.0, 45.0, 60.0, 75.0, 90.0, 105.0, 120.0, 135.0, 150.0, 165.0, 180.0]
-    )
-
-    # Shape: speed rises with wind up to a hull-speed plateau, falls off in
-    # survival conditions; angle profile peaks near a broad reach.
-    angle_profile = np.array(
-        [0.0, 0.0, 0.55, 0.75, 0.88, 0.96, 1.0, 1.0, 0.97, 0.92, 0.85, 0.78]
-    )
-    max_speed = np.array([0.0, 2.2, 3.4, 4.6, 5.6, 6.6, 7.3, 7.6, 7.5, 7.2, 6.6])
-    speed = np.outer(max_speed, angle_profile)
-    return PolarTable(tws=tws, twa=twa, speed=speed)

@@ -1,14 +1,14 @@
 import numpy as np
 import pytest
 
-from light_router.harness.degrade import (
+from experiments.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,
     candidate_configs,
     degrade,
     package_size,
 )
-from light_router.synthetic import trade_wind_field
+from experiments.synthetic import trade_wind_field
 
 
 @pytest.fixture

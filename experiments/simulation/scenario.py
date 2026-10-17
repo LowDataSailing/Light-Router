@@ -22,7 +22,7 @@ import xarray as xr
 
 from light_router.routing import IsochroneRouter, Router, RouterConfig, RouterFactory
 from light_router.models.vessel import PolarTable
-from light_router.harness.staircase import STAIRCASE, StaircaseResult, run_staircase
+from experiments.harness.staircase import STAIRCASE, StaircaseResult, run_staircase
 
 
 @dataclass

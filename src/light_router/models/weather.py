@@ -109,12 +109,16 @@ class WeatherGrid:
 def route_grid_box(
     start: tuple[float, float], finish: tuple[float, float], margin_deg: float = 2.0
 ) -> tuple[float, float, float, float]:
-    """Bounding box (lon_min, lon_max, lat_min, lat_max) covering start->finish."""
+    """Bounding box (lon_min, lon_max, lat_min, lat_max) covering start->finish.
+
+    The extent weather is fetched / cropped to for a passage: every point of
+    the start->finish corridor plus ``margin_deg`` on each side, so the
+    router can detour without leaving the grid.
+    """
     lat_min, lat_max = sorted((start[0], finish[0]))
     lon_min, lon_max = sorted((start[1], finish[1]))
-    return (
-        lon_min - margin_deg,
-        lon_max + margin_deg,
-        lat_min - margin_deg,
-        lat_max + margin_deg,
-    )
+    west = lon_min - margin_deg
+    east = lon_max + margin_deg
+    south = lat_min - margin_deg
+    north = lat_max + margin_deg
+    return west, east, south, north

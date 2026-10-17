@@ -18,14 +18,14 @@ from pathlib import Path
 import xarray as xr
 
 from light_router.dataset import grid_from_dataset, to_cf_dataset
-from light_router.harness.degrade import (
+from experiments.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,
     degrade,
     package_size,
 )
-from light_router.harness.metrics import compare_routes
-from light_router.models.experiment import StaircaseResult, StaircaseRow
+from experiments.harness.metrics import compare_routes
+from experiments.models.experiment import StaircaseResult, StaircaseRow
 from light_router.models.route import Route
 from light_router.models.weather import WeatherGrid
 from light_router.routing import RouterFactory

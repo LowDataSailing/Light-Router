@@ -8,6 +8,7 @@ weather at construction — see ``RouterFactory``.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import Callable, Protocol, runtime_checkable
 
 import xarray as xr
@@ -19,6 +20,27 @@ from light_router.models.route import Route
 class Router(Protocol):
     """The routing interface every router implements (Compatibility rule 2)."""
 
+    def route(
+        self,
+        start: tuple[float, float],
+        finish: tuple[float, float],
+        start_time: float = 0.0,
+    ) -> Route: ...
+
+
+class BaseRouter(ABC):
+    """Nominal base class for routers we own.
+
+    The ``Router`` protocol is the seam: anything with a matching ``route()``
+    satisfies it structurally — including the future oracle subprocess
+    adapter, which must not inherit from our code. ``BaseRouter`` is the
+    concrete-side counterpart for in-repo algorithms: subclass it to get the
+    validated contract nominally (and, as it grows, whatever plumbing is
+    shared by in-repo routers). A ``BaseRouter`` subclass is a ``Router`` by
+    construction; the protocol check stays the harness's only assumption.
+    """
+
+    @abstractmethod
     def route(
         self,
         start: tuple[float, float],

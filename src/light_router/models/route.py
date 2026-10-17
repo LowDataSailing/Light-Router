@@ -17,7 +17,17 @@ from light_router.geo import great_circle_distance
 
 @dataclass
 class Route:
-    """Computed route. Times are hours since the scenario start."""
+    """Computed route.
+
+    ``lat``, ``lon``, ``time``, ``heading``, ``speed``, ``tws`` and ``twa``
+    are parallel 1-D arrays with one value per waypoint (length
+    ``n_waypoints``): position (deg), hours since the scenario start,
+    heading (deg true), boat speed (kt, polar speed — no currents at
+    Level 1), true wind speed (kt) and the true wind angle (deg, the
+    absolute angle between heading and wind direction: 0 = dead upwind,
+    180 = dead downwind). ``reached``, ``eta_hours`` and ``distance_nm``
+    describe the route as a whole.
+    """
 
     lat: np.ndarray
     lon: np.ndarray
@@ -37,6 +47,19 @@ class Route:
 
 @dataclass
 class RouterConfig:
+    """Shared tuning surface for the isochrone router.
+
+    - ``dt_hours``: isochrone time step (h) — one expansion level per step.
+    - ``n_headings``: candidate headings tried from each point, every level.
+    - ``bin_deg``: geographic pruning bin size (deg) — one survivor per bin.
+    - ``max_points``: cap on candidate points per level, after pruning.
+    - ``finish_radius_nm``: arrival radius around the finish (nm).
+    - ``max_hours``: planning horizon (h); a route that cannot finish
+      within it is returned as partial (``reached`` is False).
+    - ``min_speed_kt``: candidates the polar cannot sail faster than are
+      dropped (dead calm / head wind).
+    """
+
     dt_hours: float = 1.0
     n_headings: int = 36  # every 10 degrees
     bin_deg: float = 1.0  # geographic pruning bin size

@@ -3,7 +3,9 @@ import csv
 import numpy as np
 import pytest
 
-from light_router.models.vessel import PolarTable, synthetic_cruising_polar
+from experiments.synthetic_polar import synthetic_cruising_polar
+
+from light_router.models.vessel import PolarTable
 
 
 def test_polar_rejects_bad_shape():

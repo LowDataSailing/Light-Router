@@ -22,6 +22,7 @@ from light_router.geo import destination, great_circle_distance
 from light_router.models.route import Route, RouterConfig
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import WeatherGrid
+from light_router.routing.protocol import BaseRouter
 
 
 @dataclass
@@ -38,12 +39,14 @@ class _Level:
 
 
 @dataclass
-class IsochroneRouter:
+class IsochroneRouter(BaseRouter):
     """The provisional in-process surrogate oracle.
 
     Fast numpy isochrone engine used inside harness loops; validated against
     the industry reference router before any reported result depends on it
-    (Decision #15). Not the oracle itself.
+    (Decision #15). Not the oracle itself. Inherits ``BaseRouter`` so the
+    contract is fixed nominally; future in-repo algorithms subclass
+    ``BaseRouter`` the same way instead of re-deriving the interface.
     """
 
     grid: WeatherGrid
@@ -81,8 +84,6 @@ class IsochroneRouter:
         cfg = self.config
         headings = np.arange(cfg.n_headings, dtype=float) * (360.0 / cfg.n_headings)
 
-        start_lat = np.array([start[0]])
-        start_lon = np.array([start[1]])
         if (
             float(great_circle_distance(start[0], start[1], finish[0], finish[1]))
             <= cfg.finish_radius_nm
@@ -91,8 +92,8 @@ class IsochroneRouter:
 
         levels: list[_Level] = []
         current = _Level(
-            lat=start_lat,
-            lon=start_lon,
+            lat=np.array([start[0]]),
+            lon=np.array([start[1]]),
             parent=np.array([-1]),
             heading=np.array([np.nan]),
             speed=np.array([np.nan]),
@@ -102,54 +103,19 @@ class IsochroneRouter:
         t = start_time
         while t - start_time <= cfg.max_hours:
             t_next = t + cfg.dt_hours
-            tws, wdir = self.grid.wind(
-                np.full(len(current.lat), t), current.lat, current.lon
-            )
 
-            # (n_points, n_headings) candidate arrays
-            twa = np.abs(headings[None, :] - wdir[:, None])
-            twa = np.where(twa > 180.0, 360.0 - twa, twa)
-            speed = np.asarray(
-                self.polar.boat_speed(
-                    np.repeat(tws[:, None], len(headings), axis=1), twa
-                )
-            )
-            dist = speed * cfg.dt_hours
-            sail = speed > cfg.min_speed_kt
-
-            lat_c = np.repeat(current.lat[:, None], len(headings), axis=1)
-            lon_c = np.repeat(current.lon[:, None], len(headings), axis=1)
-            new_lat, new_lon = destination(lat_c, lon_c, headings[None, :], dist)
-            new_lat, new_lon = np.asarray(new_lat), np.asarray(new_lon)
-
-            flat_lat = new_lat[sail]
-            flat_lon = new_lon[sail]
-            if flat_lat.size == 0:
+            candidates = self._expand(current, headings, t)
+            if candidates.lat.size == 0:
                 break  # trapped (e.g., dead calm everywhere)
-            flat_parent = np.repeat(np.arange(len(current.lat)), len(headings))[
-                sail.ravel()
-            ]
-            flat_heading = np.tile(headings, len(current.lat))[sail.ravel()]
-            flat_speed = speed[sail]
-            flat_tws = np.repeat(tws[:, None], len(headings), axis=1)[sail]
-            flat_twa = twa[sail]
 
             remaining = np.asarray(
-                great_circle_distance(flat_lat, flat_lon, finish[0], finish[1])
-            )
-            reached_idx = int(np.argmin(remaining))
-            if remaining[reached_idx] <= cfg.finish_radius_nm:
-                levels.append(
-                    _Level(
-                        flat_lat,
-                        flat_lon,
-                        flat_parent,
-                        flat_heading,
-                        flat_speed,
-                        flat_tws,
-                        flat_twa,
-                    )
+                great_circle_distance(
+                    candidates.lat, candidates.lon, finish[0], finish[1]
                 )
+            )
+            reached_idx = self._arrival(remaining)
+            if reached_idx is not None:
+                levels.append(candidates)
                 return self._backtrack(
                     levels,
                     len(levels) - 1,
@@ -159,18 +125,18 @@ class IsochroneRouter:
                     reached=True,
                 )
 
-            kept = self._prune(flat_lat, flat_lon, remaining, cfg)
+            kept = self._prune(candidates.lat, candidates.lon, remaining, cfg)
             # Store the pruned level: candidate parents of the next level index
             # into this pruned array.
             levels.append(
                 _Level(
-                    flat_lat[kept],
-                    flat_lon[kept],
-                    flat_parent[kept],
-                    flat_heading[kept],
-                    flat_speed[kept],
-                    flat_tws[kept],
-                    flat_twa[kept],
+                    candidates.lat[kept],
+                    candidates.lon[kept],
+                    candidates.parent[kept],
+                    candidates.heading[kept],
+                    candidates.speed[kept],
+                    candidates.tws[kept],
+                    candidates.twa[kept],
                 )
             )
             current = levels[-1]
@@ -178,10 +144,55 @@ class IsochroneRouter:
 
         # Horizon exhausted: return the partial route to the closest reached point.
         best_level, best_idx = self._closest_point(levels, finish)
-        route = self._backtrack(
+        return self._backtrack(
             levels, best_level, best_idx, start, start_time, reached=False
         )
-        return route
+
+    def _expand(self, current: _Level, headings: np.ndarray, t: float) -> _Level:
+        """One isochrone expansion: every candidate reachable at t + dt.
+
+        Samples the wind at each frontier point, evaluates the polar for
+        every (point, heading) pair, moves each sailable candidate along
+        its heading, and returns the flat candidate arrays with parent
+        indices into ``current``.
+        """
+        cfg = self.config
+        tws, wdir = self.grid.wind(
+            np.full(len(current.lat), t), current.lat, current.lon
+        )
+
+        # (n_points, n_headings) candidate arrays
+        twa = np.abs(headings[None, :] - wdir[:, None])
+        twa = np.where(twa > 180.0, 360.0 - twa, twa)
+        speed = np.asarray(
+            self.polar.boat_speed(np.repeat(tws[:, None], len(headings), axis=1), twa)
+        )
+        dist = speed * cfg.dt_hours
+        sail = speed > cfg.min_speed_kt
+
+        lat_c = np.repeat(current.lat[:, None], len(headings), axis=1)
+        lon_c = np.repeat(current.lon[:, None], len(headings), axis=1)
+        new_lat, new_lon = destination(lat_c, lon_c, headings[None, :], dist)
+        new_lat, new_lon = np.asarray(new_lat), np.asarray(new_lon)
+
+        return _Level(
+            lat=new_lat[sail],
+            lon=new_lon[sail],
+            parent=np.repeat(np.arange(len(current.lat)), len(headings))[sail.ravel()],
+            heading=np.tile(headings, len(current.lat))[sail.ravel()],
+            speed=speed[sail],
+            tws=np.repeat(tws[:, None], len(headings), axis=1)[sail],
+            twa=twa[sail],
+        )
+
+    def _arrival(self, remaining: np.ndarray) -> int | None:
+        """Index of the candidate closest to the finish, if it is inside the
+        finish radius — checking the closest is sufficient: if it is not
+        inside, nothing is."""
+        idx = int(np.argmin(remaining))
+        if remaining[idx] <= self.config.finish_radius_nm:
+            return idx
+        return None
 
     def _prune(
         self, lat: np.ndarray, lon: np.ndarray, remaining: np.ndarray, cfg: RouterConfig

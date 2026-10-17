@@ -51,9 +51,10 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from light_router.reporting.artifacts import (  # noqa: E402
+from experiments.reporting.artifacts import (  # noqa: E402
     new_run_dir,
     write_operational_artifacts,
 )
@@ -62,8 +63,8 @@ from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # n
 from light_router.weather_data.pack import load_pack, write_pack  # noqa: E402
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
 from light_router.routing import RouterConfig  # noqa: E402
-from light_router.models.vessel import synthetic_cruising_polar  # noqa: E402
-from light_router.simulation.simulate import (  # noqa: E402
+from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
+from experiments.simulation.simulate import (  # noqa: E402
     ForecastCycle,
     format_operational_summary,
     run_operational_staircase,

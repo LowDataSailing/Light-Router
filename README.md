@@ -25,13 +25,14 @@ make docs-serve
 
 ```
 Light-Router/
-├── src/light_router/  # the package: models, routing, harness, simulation,
-│                      # weather_data, reporting
-├── experiments/       # runnable experiment drivers (Goal 1 experiments)
+├── src/light_router/  # the library (the router stack): models, routing,
+│                      # weather_data — what would run on a boat
+├── experiments/       # the virtual world: harness, simulation, reporting,
+│                      # synthetic fixtures, and the experiment drivers
 ├── tests/             # pytest suite
 ├── docs/              # user-facing documentation site (mkdocs)
 ├── research/          # internal research notes
-├── specs/             # working mirrors of the Notion specs
+├── specs/             # working mirrors of the collective specs
 ├── Makefile           # Task runner (uv-based)
 └── pyproject.toml     # Dependencies and project config
 ```

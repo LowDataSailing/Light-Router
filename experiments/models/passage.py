@@ -1,9 +1,9 @@
-"""Passage records: the input cycles and the outcome of one passage.
+"""Passage records: what the router received and what actually happened.
 
-``ForecastCycle`` is one forecast run available to the router (data packs
-store them); ``CycleRecord`` is what the router received and believed at one
-planning cycle; ``PassageResult`` is the passage as it actually happened on
-the measured weather.
+``CycleRecord`` is what the router received and believed at one planning
+cycle; ``PassageResult`` is the passage as it actually happened on the
+measured weather. (The forecast runs themselves are weather-domain:
+``light_router.models.forecast.ForecastCycle``.)
 """
 
 from __future__ import annotations
@@ -11,23 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-import xarray as xr
 
-from light_router.models.degradation import DegradeConfig
+from experiments.models.degradation import DegradeConfig
 from light_router.models.route import Route
-
-
-@dataclass
-class ForecastCycle:
-    """One GFS run available to the router during the passage.
-
-    init_hour: run initialization, in absolute hours since passage start.
-    weather: the run's forecast as a CF Dataset, time = lead hours since
-    its own initialization.
-    """
-
-    init_hour: float
-    weather: xr.Dataset
 
 
 @dataclass

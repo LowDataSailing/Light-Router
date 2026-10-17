@@ -93,6 +93,7 @@ select = ["E", "W", "F"]
 [tool.pytest.ini_options]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-v --tb=short --import-mode=importlib"
+pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.mypy]

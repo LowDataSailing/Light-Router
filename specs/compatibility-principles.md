@@ -1,7 +1,7 @@
 # Compatibility Principles
 
 Status: binding — these rules bind every goal and every PR.
-Source of truth: Notion page "Compatibility Principles" (Specifications).
+Source of truth: Nextcloud collective "LowDataSailing" (reliquary), page "Compatibility Principles".
 This file is the repo mirror for PR review; code that touches data, routing, or
 the harness states which rules it honors, and the spec axis of code review
 checks them.
@@ -56,6 +56,11 @@ breakdown and naming conventions.
   (value-per-byte acquisition policy, Level 4). **Gymnasium** is the API
   standard. **OpenEnv** is re-evaluated only if/when HF-ecosystem RL
   post-training is adopted and the API has stabilized.
+- **Where the objects live** (2026-10-17 architecture split): the episode
+  objects (`Scenario`, `simulate_passage`) are experiment-domain and live in
+  `experiments/simulation/` — they are the virtual world's mimic of a
+  router at sea. The Gymnasium adapter (Goal 2+) wraps them; the semantics
+  above are the contract it will find there.
 
 ## 4. Real data for reported results
 

@@ -15,7 +15,7 @@ import zlib
 
 import numpy as np
 
-from light_router.models.degradation import DegradeConfig
+from experiments.models.degradation import DegradeConfig
 from light_router.models.weather import WeatherGrid
 
 

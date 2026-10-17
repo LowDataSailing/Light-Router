@@ -1,7 +1,7 @@
 # Data Pipeline
 
 Status: reference — how data flows from raw archives to published curves.
-Source of truth: Notion page "Data Pipeline" (Specifications). Companion to
+Source of truth: Nextcloud collective "LowDataSailing" (reliquary), page "Data Pipeline". Companion to
 the Dataset Construction page (the *why*) — this file is the *how*.
 
 ## Pipeline overview

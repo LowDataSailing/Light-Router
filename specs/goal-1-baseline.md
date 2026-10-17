@@ -1,7 +1,7 @@
 # Goal 1 — Baseline System (Level 1) + Degradation Harness: Implementation Spec
 
 Status: implemented (prototype) — see PR for review.
-Source of truth: Notion workspace pages "Goal 1: Degradation Curve", "Baseline System
+Source of truth: Nextcloud collective "LowDataSailing" (reliquary), pages "Goal 1: Degradation Curve", "Baseline System
 (Level 1)", "Benchmark Harness", "Test Scenarios", "Decisions Log" (#1, #2, #4, #9,
 #15-#18), plus the cross-goal specs `compatibility-principles.md` and
 `data-pipeline.md` in this directory.

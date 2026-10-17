@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from light_router.dataset import dataset_extent, grid_from_dataset, to_cf_dataset
-from light_router.synthetic import trade_wind_field
+from experiments.synthetic import trade_wind_field
 
 
 def make_grid():

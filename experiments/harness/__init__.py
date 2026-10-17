@@ -6,15 +6,15 @@ speaks the canonical CF Dataset and the Router protocol, so the oracle is
 swappable without touching it.
 """
 
-from light_router.harness.degrade import (
+from experiments.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,
     candidate_configs,
     degrade,
     package_size,
 )
-from light_router.harness.metrics import RouteMetrics, compare_routes
-from light_router.harness.staircase import (
+from experiments.harness.metrics import RouteMetrics, compare_routes
+from experiments.harness.staircase import (
     STAIRCASE,
     StaircaseResult,
     StaircaseRow,

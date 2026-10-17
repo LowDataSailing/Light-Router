@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from light_router.models.passage import ForecastCycle
+from light_router.models.forecast import ForecastCycle
 from light_router.provenance import git_sha
 
 PACK_MANIFEST = "pack.json"
