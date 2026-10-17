@@ -1,7 +1,7 @@
 # Goal 1 — Baseline System (Level 1) + Degradation Harness: Implementation Spec
 
 Status: implemented (prototype) — see PR for review.
-Source of truth: Notion workspace pages "Goal 1: Degradation Curve", "Baseline System
+Source of truth: Nextcloud collective "LowDataSailing" (reliquary), pages "Goal 1: Degradation Curve", "Baseline System
 (Level 1)", "Benchmark Harness", "Test Scenarios", "Decisions Log" (#1, #2, #4, #9,
 #15-#18), plus the cross-goal specs `compatibility-principles.md` and
 `data-pipeline.md` in this directory.
@@ -151,8 +151,11 @@ quantization helper and cannot diverge.
   decisions are local, then temporal, then bits.
 - Metrics (reported separately, never combined): ETA difference, distance
   difference, VMG difference, max wind exposure difference, decision divergence
-  (initial-bearing split), geographic divergence (mean distance from each
-  point of the degraded track to the nearest point of the reference track).
+  (initial-bearing split), geographic divergence (both tracks resampled to 50
+  equal-progress points, then the mean distance from each degraded-track point
+  to the nearest reference-track point; the resampling keeps the metric
+  independent of waypoint counts — the exact definition stays open, Decision
+  #7).
 - Output: CSV rows (`write_csv`) + console summary (`format_summary`).
 
 ### 6. Operational passage simulation (`simulate.py`, `data/era5.py`)

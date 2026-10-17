@@ -7,14 +7,14 @@ import pytest
 
 from light_router.dataset import to_cf_dataset
 from light_router.routing import RouterConfig
-from light_router.models.vessel import synthetic_cruising_polar
-from light_router.simulation.simulate import (
+from experiments.synthetic_polar import synthetic_cruising_polar
+from experiments.simulation.simulate import (
     ForecastCycle,
     format_operational_summary,
     run_operational_staircase,
     simulate_passage,
 )
-from light_router.synthetic import trade_wind_field
+from experiments.synthetic import trade_wind_field
 
 START = (29.5, -13.5)
 FINISH = (26.5, -16.5)

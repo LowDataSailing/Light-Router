@@ -2,19 +2,23 @@
 
 Agent instructions for this repository.
 
-## Notion workspace (spec source of truth)
+## Spec source of truth: Nextcloud Collectives (reliquary)
 
-This project is backed by a Notion workspace: **LowDataSailing > Light-Router**.
-Most specs live there (Goals, Baseline System, Benchmark Harness, Data
-Pipeline, Compatibility Principles, Decisions Log) and it is the **source of
-truth**. To avoid markdown duplication:
+The project specs live in the **LowDataSailing collective** on the Nextcloud
+instance (reliquary, `reliquary.pascal-internet.duckdns.org`) — migrated from
+Notion on 2026-10-17. The collective is the **source of truth** (Goals,
+Baseline System, Benchmark Harness, Data Pipeline, Compatibility Principles,
+Decisions Log).
 
-- Update the Notion page first; the repo mirrors it only when a PR needs a
-  reviewable copy (`specs/*.md` are working mirrors for PR review, not the
+- Update the collective page first; the repo mirrors it only when a PR needs
+  a reviewable copy (`specs/*.md` are working mirrors for PR review, not the
   canonical text).
-- Never copy workspace material into `docs/` — `docs/` is user-facing only.
-- Access the workspace through the `connector_notion` tools; do not
-  paraphrase Notion content from memory — fetch the page.
+- Never copy collective material into `docs/` — `docs/` is user-facing only.
+- Notion is no longer maintained for this project — do not read or update it
+  for spec purposes.
+- Access the collective through the Nextcloud MCP server (Collectives app)
+  or WebDAV; fetch the page, do not paraphrase spec content from memory.
+- Collective quirk: a Collectives folder page is its `Readme.md`.
 
 ## Agent skills
 

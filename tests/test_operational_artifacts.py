@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pytest
 
-from light_router.reporting.artifacts import (
+from experiments.reporting.artifacts import (
     CYCLES_NAME,
     MANIFEST_NAME,
     PASSAGE_NAME,
@@ -15,12 +15,12 @@ from light_router.reporting.artifacts import (
     new_run_dir,
     write_operational_artifacts,
 )
-from light_router.harness.staircase import budget_label
+from experiments.harness.staircase import budget_label
 from light_router.dataset import to_cf_dataset
 from light_router.routing import RouterConfig
-from light_router.models.vessel import synthetic_cruising_polar
-from light_router.simulation.simulate import run_operational_staircase
-from light_router.synthetic import trade_wind_field
+from experiments.synthetic_polar import synthetic_cruising_polar
+from experiments.simulation.simulate import run_operational_staircase
+from experiments.synthetic import trade_wind_field
 
 START = (29.5, -13.5)
 FINISH = (26.5, -16.5)
@@ -49,7 +49,7 @@ def make_weather(wind_kt: float = 15.0):
 
 @pytest.fixture(scope="module")
 def results():
-    from light_router.simulation.simulate import ForecastCycle
+    from light_router.models.forecast import ForecastCycle
 
     weather = make_weather()
     cycles = [ForecastCycle(init_hour=h, weather=weather) for h in (0.0, 6.0, 12.0)]
@@ -145,7 +145,7 @@ def test_operational_manifest(run_dir):
 
 def test_operational_plots(tmp_path, results):
     pytest.importorskip("matplotlib")
-    from light_router.reporting.plots import write_operational_plots
+    from experiments.reporting.plots import write_operational_plots
 
     weather, passage_results = results
     out = tmp_path / "plots"

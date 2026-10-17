@@ -28,14 +28,15 @@ make test
 
 ```
 Light-Router/
-├── src/light_router/   # the package (models, routing, harness, simulation,
-│                       #  weather_data, reporting)
+├── src/light_router/   # the library — the router stack (models, routing,
+│                       #  weather_data): what would run on a boat
 ├── tests/              # pytest suite
-├── experiments/        # runnable experiment drivers (the Goal 1 experiments)
+├── experiments/        # the virtual world: harness, simulation, reporting,
+│                       #  synthetic fixtures, and the experiment drivers
 ├── data/               # gitignored: packs/ = immutable checksummed experiment
 │                       # inputs; cache/ = regenerable fetch cache
 ├── runs/               # gitignored: experiment output directories
-├── specs/              # working mirrors of the Notion specs (for PR review)
+├── specs/              # working mirrors of the collective specs (for PR review)
 ├── research/           # internal research notes (not on the docs site)
 ├── docs/               # user-facing documentation site (mkdocs)
 └── agents/             # agent instructions (issue tracker, triage, domain)

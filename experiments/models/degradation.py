@@ -14,10 +14,19 @@ WIND_VARIABLES = ("u10", "v10")
 
 @dataclass(frozen=True)
 class DegradeConfig:
+    """How a weather package is constrained to a byte budget."""
+
     spatial_stride: int = 1
+    """Take every N-th lat/lon point (1 = full resolution)."""
+
     temporal_stride: int = 1
+    """Take every N-th forecast step (1 = full resolution)."""
+
     bits: int = 16
+    """Quantization depth per value (32 = no quantization)."""
+
     keep_variables: tuple[str, ...] = WIND_VARIABLES
+    """Variables kept in the package; the rest are dropped."""
 
     def fidelity_score(self) -> tuple[float, ...]:
         """Higher is better: prefer small strides and many bits.

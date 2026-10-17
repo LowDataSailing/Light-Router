@@ -28,11 +28,15 @@ Usage:
     uv run python experiments/operational_passage.py --start 28.0,-15.5 \
         --finish 14.6,-61.0 --scenario atlantic_canaries_caribbean \
         --start-date 2025-11-15 --days 20 --max-passage-hours 600 \
-        --artifacts          # full Atlantic crossing (Canaries -> Martinique)
+        --artifacts          # long-route stress test (out of Goal 1 scope)
     uv run python experiments/operational_passage.py --start 14.6,-61.0 \
         --finish 48.4,-4.8 --scenario atlantic_caribbean_brittany \
         --start-date 2025-03-01 --days 30 --max-passage-hours 700 \
-        --margin 2.0 --artifacts  # full Atlantic crossing (Martinique -> Brest)
+        --margin 2.0 --artifacts  # long-route stress test (out of Goal 1 scope)
+
+The prototype scope is the ~1-week trade-wind passage (Goal 1); the
+multi-week Atlantic routes above are stress tests of the harness, not
+spec scenarios.
 
 GRIB loading needs the ``grib`` dependency group and a system ecCodes
 library (Debian: ``apt install libeccodes0``). Downloads are cached under
@@ -51,9 +55,9 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from light_router.reporting.artifacts import (  # noqa: E402
+from experiments.reporting.artifacts import (  # noqa: E402
     new_run_dir,
     write_operational_artifacts,
 )
@@ -62,12 +66,12 @@ from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # n
 from light_router.weather_data.pack import load_pack, write_pack  # noqa: E402
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
 from light_router.routing import RouterConfig  # noqa: E402
-from light_router.models.vessel import synthetic_cruising_polar  # noqa: E402
-from light_router.simulation.simulate import (  # noqa: E402
-    ForecastCycle,
+from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
+from experiments.simulation.simulate import (  # noqa: E402
     format_operational_summary,
     run_operational_staircase,
 )
+from light_router.models.forecast import ForecastCycle  # noqa: E402
 from light_router.models.weather import route_grid_box  # noqa: E402
 
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
@@ -103,7 +107,12 @@ def era5_truth(start: date, days: int, extent: tuple[float, float, float, float]
     lons = np.arange(lon_min, lon_max + TRUTH_STEP_DEG / 2, TRUTH_STEP_DEG)
     start_str = start.strftime("%Y-%m-%d")
     end = start + timedelta(days=days)
-    cache = CACHE / f"era5_{start_str}_{end.strftime('%Y-%m-%d')}.json"
+    # content-addressed by date AND region: a different route must never
+    # reuse another region's truth grid
+    cache = (
+        CACHE / f"era5_{start_str}_{end.strftime('%Y-%m-%d')}"
+        f"_{lat_min:g}_{lat_max:g}_{lon_min:g}_{lon_max:g}.json"
+    )
     print(
         f"ERA5 truth: {len(lats)}x{len(lons)} points, "
         f"{start_str}..{end.strftime('%Y-%m-%d')} ({days * 24} h)"

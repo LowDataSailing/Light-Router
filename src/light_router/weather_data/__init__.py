@@ -6,3 +6,5 @@ downstream changes. ``downloader`` holds the shared HTTP machinery
 (retries, rate limits); ``grib`` loads local GRIB2 files; ``pack`` is the
 self-contained experiment input format.
 """
+
+from __future__ import annotations

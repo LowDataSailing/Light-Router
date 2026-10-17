@@ -19,8 +19,8 @@ import numpy as np
 import xarray as xr
 
 from light_router.dataset import dataset_extent
-from light_router.harness.staircase import StaircaseResult, budget_label, write_csv
-from light_router.models.passage import PassageResult
+from experiments.harness.staircase import StaircaseResult, budget_label, write_csv
+from experiments.models.passage import PassageResult
 from light_router.models.route import Route, RouterConfig
 from light_router.provenance import git_sha
 
@@ -135,8 +135,8 @@ def write_artifacts(
     ``routes`` maps a label to a route to export in addition to the staircase
     rows (e.g. the reference route under "reference").
     """
-    from light_router.reporting.export import write_route_files
-    from light_router.reporting.plots import write_plots
+    from experiments.reporting.export import write_route_files
+    from experiments.reporting.plots import write_plots
 
     write_manifest(
         run_dir,
@@ -217,8 +217,8 @@ def write_operational_artifacts(
     feeds the manifest provenance checksum, the wind snapshot and the plot
     underlay.
     """
-    from light_router.reporting.export import write_route_files
-    from light_router.reporting.plots import write_operational_plots
+    from experiments.reporting.export import write_route_files
+    from experiments.reporting.plots import write_operational_plots
 
     write_manifest(
         run_dir,

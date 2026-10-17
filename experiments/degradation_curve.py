@@ -38,18 +38,18 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from light_router.reporting.artifacts import new_run_dir, write_artifacts  # noqa: E402
+from experiments.reporting.artifacts import new_run_dir, write_artifacts  # noqa: E402
 from light_router.weather_data.gfs import download_gfs_wind  # noqa: E402
 from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
 from light_router.dataset import dataset_extent, to_cf_dataset  # noqa: E402
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
 from light_router.routing import RouterConfig  # noqa: E402
-from light_router.models.vessel import synthetic_cruising_polar  # noqa: E402
-from light_router.simulation.scenario import Scenario, surrogate_router_factory  # noqa: E402
-from light_router.harness.staircase import STAIRCASE, format_summary, write_csv  # noqa: E402
-from light_router.synthetic import add_storm, trade_wind_field  # noqa: E402
+from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
+from experiments.simulation.scenario import Scenario, surrogate_router_factory  # noqa: E402
+from experiments.harness.staircase import STAIRCASE, format_summary, write_csv  # noqa: E402
+from experiments.synthetic import add_storm, trade_wind_field  # noqa: E402
 from light_router.models.weather import route_grid_box  # noqa: E402
 
 START = (28.0, -15.5)  # Canary Islands
@@ -178,7 +178,7 @@ def main() -> int:
         print(f"artifacts written to {run_dir}")
         print(
             "re-render later with: "
-            "uv run python -m light_router.reporting.summarize <run_dir>"
+            "uv run python -m experiments.reporting.summarize <run_dir>"
         )
     return 0
 

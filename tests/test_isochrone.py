@@ -6,8 +6,8 @@ from light_router.routing import (
     mean_vmg,
     route_bearing,
 )
-from light_router.models.vessel import synthetic_cruising_polar
-from light_router.synthetic import trade_wind_field
+from experiments.synthetic_polar import synthetic_cruising_polar
+from experiments.synthetic import trade_wind_field
 
 
 def make_router(wind_from_deg=60.0, dt=2.0, max_hours=200.0):

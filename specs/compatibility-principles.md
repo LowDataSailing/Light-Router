@@ -1,7 +1,7 @@
 # Compatibility Principles
 
 Status: binding — these rules bind every goal and every PR.
-Source of truth: Notion page "Compatibility Principles" (Specifications).
+Source of truth: Nextcloud collective "LowDataSailing" (reliquary), page "Compatibility Principles".
 This file is the repo mirror for PR review; code that touches data, routing, or
 the harness states which rules it honors, and the spec axis of code review
 checks them.
@@ -16,7 +16,10 @@ in the open-source ecosystem is adopted, not rebuilt.
   (dimensions: time, latitude, longitude; variables: u10, v10, later Hs /
   currents / msl; time = hours since forecast initialization).
 - Loaders produce it; routers and the harness consume it. On disk, scenario
-  packages store it as **Zarr**.
+  packages store it as **Zarr** — except Goal 1 experiment inputs, which are
+  self-contained **npz data packs** per ADR-0001 (zero extra dependencies at
+  a few tens of MB; Zarr is reconsidered for the large reanalysis store in
+  later goals).
 - Adding a data source = writing a loader. Nothing downstream changes.
 - The current `WeatherGrid` class is a transitional internal view; it must not
   appear in any public interface.
@@ -56,6 +59,11 @@ breakdown and naming conventions.
   (value-per-byte acquisition policy, Level 4). **Gymnasium** is the API
   standard. **OpenEnv** is re-evaluated only if/when HF-ecosystem RL
   post-training is adopted and the API has stabilized.
+- **Where the objects live** (2026-10-17 architecture split): the episode
+  objects (`Scenario`, `simulate_passage`) are experiment-domain and live in
+  `experiments/simulation/` — they are the virtual world's mimic of a
+  router at sea. The Gymnasium adapter (Goal 2+) wraps them; the semantics
+  above are the contract it will find there.
 
 ## 4. Real data for reported results
 

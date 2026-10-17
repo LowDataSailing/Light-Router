@@ -15,8 +15,8 @@ from light_router.weather_data.pack import (
     write_pack,
 )
 from light_router.dataset import grid_from_dataset, to_cf_dataset
-from light_router.simulation.simulate import ForecastCycle
-from light_router.synthetic import trade_wind_field
+from light_router.models.forecast import ForecastCycle
+from experiments.synthetic import trade_wind_field
 
 
 def make_weather(lats, lons, times, wind_kt=15.0):

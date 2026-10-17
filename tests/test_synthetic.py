@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from light_router.synthetic import add_storm, trade_wind_field
+from experiments.synthetic import add_storm, trade_wind_field
 
 
 @pytest.fixture

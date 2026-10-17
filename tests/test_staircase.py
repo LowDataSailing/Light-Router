@@ -3,16 +3,16 @@ import pytest
 
 from light_router.dataset import to_cf_dataset
 from light_router.routing import RouterConfig
-from light_router.harness.metrics import compare_routes
-from light_router.models.vessel import synthetic_cruising_polar
-from light_router.simulation.scenario import surrogate_router_factory
-from light_router.harness.staircase import (
+from experiments.harness.metrics import compare_routes
+from experiments.synthetic_polar import synthetic_cruising_polar
+from experiments.simulation.scenario import surrogate_router_factory
+from experiments.harness.staircase import (
     STAIRCASE,
     budget_label,
     run_staircase,
     write_csv,
 )
-from light_router.synthetic import add_storm, trade_wind_field
+from experiments.synthetic import add_storm, trade_wind_field
 
 START = (28.0, -15.5)
 FINISH = (16.75, -22.9)

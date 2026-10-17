@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 
 from light_router.geo import great_circle_distance
-from light_router.models.experiment import RouteMetrics
+from experiments.models.experiment import RouteMetrics
 from light_router.models.route import Route, mean_vmg, route_bearing
 
 DECISION_SPLIT_DEG = 15.0  # initial-bearing split that counts as a different decision

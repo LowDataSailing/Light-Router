@@ -3,18 +3,20 @@
 ``degrade`` is the bandwidth pipeline, ``staircase`` is the budget-staircase
 experiment runner, ``metrics`` is the route-quality comparison. The harness
 speaks the canonical CF Dataset and the Router protocol, so the oracle is
-swappable without touching it.
+swappable without touching the harness itself.
 """
 
-from light_router.harness.degrade import (
+from __future__ import annotations
+
+from experiments.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,
     candidate_configs,
     degrade,
     package_size,
 )
-from light_router.harness.metrics import RouteMetrics, compare_routes
-from light_router.harness.staircase import (
+from experiments.harness.metrics import RouteMetrics, compare_routes
+from experiments.harness.staircase import (
     STAIRCASE,
     StaircaseResult,
     StaircaseRow,
