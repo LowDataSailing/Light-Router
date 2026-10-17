@@ -9,17 +9,19 @@ import numpy as np
 
 @dataclass
 class WeatherGrid:
-    """Weather field on a regular lat/lon grid with a time axis.
-
-    times: hours since the scenario start (strictly increasing).
-    lats / lons: strictly increasing coordinate axes (degrees).
-    data: variable name -> array of shape (nt, nlat, nlon).
-    """
+    """Weather field on a regular lat/lon grid with a time axis."""
 
     times: np.ndarray
+    """Time axis, hours since the scenario start (strictly increasing)."""
+
     lats: np.ndarray
+    """Latitude axis (degrees, strictly increasing)."""
+
     lons: np.ndarray
+    """Longitude axis (degrees, strictly increasing)."""
+
     data: dict[str, np.ndarray] = field(default_factory=dict)
+    """Variables by name; each array has shape (nt, nlat, nlon)."""
 
     def __post_init__(self) -> None:
         if self.times.ndim != 1 or len(self.times) < 1:

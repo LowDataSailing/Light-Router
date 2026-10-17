@@ -18,47 +18,66 @@ from light_router.models.route import Route
 
 @dataclass
 class CycleRecord:
-    """What the router received and planned at one planning cycle.
-
-    hour: absolute cycle time (h since passage start). config: the
-    degradation config received, or None when the budget was unreachable
-    even fully degraded (no data this cycle). package_bytes: the size of
-    the received package. plan_reached: whether the replanned route
-    reached the finish within the forecast horizon. planned_arrival_hour:
-    the believed arrival (absolute h) at cycle time, None if not reached.
-    """
+    """What the router received and planned at one planning cycle."""
 
     hour: float
+    """Absolute cycle time (h since passage start)."""
+
     config: DegradeConfig | None
+    """The degradation config received; None when the budget was
+    unreachable even fully degraded (no data this cycle)."""
+
     package_bytes: int
+    """Size of the received package (bytes)."""
+
     plan_reached: bool
+    """Whether the replanned route reached the finish within the forecast
+    horizon."""
+
     planned_arrival_hour: float | None
+    """The believed arrival (absolute h) at cycle time; None if not
+    reached."""
 
 
 @dataclass
 class PassageResult:
-    """The actual passage as it happened on the measured weather.
-
-    lat/lon/time: the track (deg, absolute h since passage start).
-    heading: deg true; speed: kt achieved on the true wind; tws/twa: the
-    true wind speed (kt) and angle (deg) experienced. reached: whether
-    the finish radius was entered; passage_hours/distance_nm: the
-    outcome; budget_bytes: the per-cycle budget this passage ran under;
-    cycles: the per-cycle records.
-    """
+    """The actual passage as it happened on the measured weather."""
 
     lat: np.ndarray
+    """Track latitudes (deg)."""
+
     lon: np.ndarray
+    """Track longitudes (deg)."""
+
     time: np.ndarray
+    """Absolute hours since passage start, one per track point."""
+
     heading: np.ndarray
+    """Heading per track point (deg true); NaN at the start point."""
+
     speed: np.ndarray
+    """Boat speed per track point (kt), achieved on the true wind."""
+
     tws: np.ndarray
+    """True wind speed experienced per track point (kt)."""
+
     twa: np.ndarray
+    """True wind angle experienced per track point (deg)."""
+
     reached: bool
+    """Whether the finish radius was entered."""
+
     passage_hours: float
+    """Total passage time (h since passage start)."""
+
     distance_nm: float
+    """Total distance sailed (nm)."""
+
     budget_bytes: int | None
+    """The per-cycle budget this passage ran under (None = unlimited)."""
+
     cycles: list[CycleRecord] = field(repr=False, compare=False)
+    """The per-cycle records of what was received and believed."""
 
     @property
     def total_package_bytes(self) -> int:

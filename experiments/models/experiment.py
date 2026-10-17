@@ -17,21 +17,33 @@ from light_router.models.route import Route
 class RouteMetrics:
     """Degradation of one route vs the reference route, one axis per field.
 
-    Reported separately, never combined into a single score. eta/distance
-    diffs are percent of the reference; vmg and max-wind diffs are in
-    knots; initial_bearing_diff is degrees; geographic_divergence is the
-    mean nearest-track distance in nm (both tracks resampled to 50
-    equal-progress points). reached: whether the degraded route finished.
+    Reported separately, never combined into a single score.
     """
 
     eta_diff_pct: float
+    """Arrival-time difference, percent of the reference ETA."""
+
     distance_diff_pct: float
+    """Sailed-distance difference, percent of the reference distance."""
+
     vmg_diff_kt: float
+    """Difference in velocity-made-good toward the finish (kt)."""
+
     max_wind_diff_kt: float
+    """Difference in the maximum wind encountered (kt)."""
+
     decision_divergence: bool
+    """Whether the first tactical decision differs from the reference."""
+
     initial_bearing_diff_deg: float
+    """Difference in the initial bearing (deg)."""
+
     geographic_divergence_nm: float
+    """Mean nearest-track distance (nm); both tracks resampled to 50
+    equal-progress points."""
+
     reached: bool
+    """Whether the degraded route reached the finish."""
 
     def as_dict(self) -> dict[str, object]:
         """Metrics as a flat dict (one CSV/JSON row)."""
@@ -40,18 +52,31 @@ class RouteMetrics:
 
 @dataclass
 class StaircaseRow:
-    """One staircase level: the budget, the config chosen under it, the
-    measured package size in bytes, the degradation metrics, and the
-    computed route. budget is the display label ("unlimited", "10 KB")."""
+    """One staircase level: budget, chosen config, measured size, metrics."""
 
     budget: str
+    """Display label ("unlimited", "10 KB")."""
+
     budget_bytes: int | None
+    """The budget in bytes (None = unlimited)."""
+
     package_bytes: int
+    """Measured size of the degraded package (bytes)."""
+
     spatial_stride: int
+    """Spatial stride of the chosen config."""
+
     temporal_stride: int
+    """Temporal stride of the chosen config."""
+
     bits: int
+    """Quantization depth of the chosen config."""
+
     metrics: RouteMetrics
+    """Degradation of this level's route vs the reference."""
+
     route: Route = field(repr=False, compare=False)
+    """The computed route for this level."""
 
 
 @dataclass

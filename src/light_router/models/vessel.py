@@ -18,17 +18,17 @@ import numpy as np
 
 @dataclass
 class PolarTable:
-    """Speed table over (TWS, TWA).
-
-    tws: true wind speeds (kt), strictly increasing.
-    twa: true wind angles (deg), strictly increasing, 0..180 (port tack only;
-    gybe/tack symmetry mirrors the angle).
-    speed: knots, shape (len(tws), len(twa)).
-    """
+    """Speed table over (TWS, TWA)."""
 
     tws: np.ndarray
+    """True wind speeds (kt), strictly increasing."""
+
     twa: np.ndarray
+    """True wind angles (deg), strictly increasing, 0..180 — port tack
+    only; tack/gybe symmetry mirrors the angle."""
+
     speed: np.ndarray
+    """Boat speed (kt), shape (len(tws), len(twa))."""
 
     def __post_init__(self) -> None:
         if self.tws.ndim != 1 or self.twa.ndim != 1:

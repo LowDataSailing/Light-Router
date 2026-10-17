@@ -15,12 +15,11 @@ import xarray as xr
 
 @dataclass
 class ForecastCycle:
-    """One GFS run available to the router during the passage.
-
-    init_hour: run initialization, in absolute hours since passage start.
-    weather: the run's forecast as a CF Dataset, time = lead hours since
-    its own initialization.
-    """
+    """One GFS run available to the router during the passage."""
 
     init_hour: float
+    """Run initialization, in absolute hours since passage start."""
+
     weather: xr.Dataset
+    """The run's forecast as a CF Dataset, time = lead hours since its own
+    initialization."""

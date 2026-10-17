@@ -21,18 +21,25 @@ BASE_URL = "https://climato.chom.engineering"
 
 @dataclass(frozen=True)
 class Station:
-    """One CHOM observation station.
-
-    ic_id: CHOM station identifier. latitude/longitude: decimal degrees
-    (WGS84). parameters: CHOM parameter codes the station reports.
-    """
+    """One CHOM observation station."""
 
     ic_id: str
+    """CHOM station identifier."""
+
     name: str
+    """Human-readable station name."""
+
     latitude: float
+    """Station latitude (decimal degrees, WGS84)."""
+
     longitude: float
+    """Station longitude (decimal degrees, WGS84)."""
+
     country: str
+    """Country the station is located in."""
+
     parameters: tuple[str, ...] = ()
+    """CHOM parameter codes the station reports."""
 
 
 def _get(
