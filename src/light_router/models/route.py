@@ -69,7 +69,11 @@ class RouterConfig:
     min_speed_kt: float = 0.1  # below this a candidate cannot sail
 
     def as_dict(self) -> dict[str, float | int]:
-        """Plain-dict form for manifests and other serialized output."""
+        """Plain-dict form for manifests and other serialized output.
+
+        Every tuning field is included, so a manifest fully determines the
+        router configuration.
+        """
         return {
             "dt_hours": self.dt_hours,
             "n_headings": self.n_headings,
@@ -77,6 +81,7 @@ class RouterConfig:
             "max_points": self.max_points,
             "finish_radius_nm": self.finish_radius_nm,
             "max_hours": self.max_hours,
+            "min_speed_kt": self.min_speed_kt,
         }
 
 

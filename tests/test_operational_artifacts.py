@@ -49,7 +49,7 @@ def make_weather(wind_kt: float = 15.0):
 
 @pytest.fixture(scope="module")
 def results():
-    from experiments.simulation.simulate import ForecastCycle
+    from light_router.models.forecast import ForecastCycle
 
     weather = make_weather()
     cycles = [ForecastCycle(init_hour=h, weather=weather) for h in (0.0, 6.0, 12.0)]

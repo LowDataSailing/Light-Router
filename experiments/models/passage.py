@@ -18,26 +18,42 @@ from light_router.models.route import Route
 
 @dataclass
 class CycleRecord:
-    """What the router received and planned at one planning cycle."""
+    """What the router received and planned at one planning cycle.
 
-    hour: float  # absolute cycle time
-    config: DegradeConfig | None  # None = budget unreachable even fully degraded
+    hour: absolute cycle time (h since passage start). config: the
+    degradation config received, or None when the budget was unreachable
+    even fully degraded (no data this cycle). package_bytes: the size of
+    the received package. plan_reached: whether the replanned route
+    reached the finish within the forecast horizon. planned_arrival_hour:
+    the believed arrival (absolute h) at cycle time, None if not reached.
+    """
+
+    hour: float
+    config: DegradeConfig | None
     package_bytes: int
     plan_reached: bool
-    planned_arrival_hour: float | None  # absolute, as believed at cycle time
+    planned_arrival_hour: float | None
 
 
 @dataclass
 class PassageResult:
-    """The actual passage as it happened on the measured weather."""
+    """The actual passage as it happened on the measured weather.
+
+    lat/lon/time: the track (deg, absolute h since passage start).
+    heading: deg true; speed: kt achieved on the true wind; tws/twa: the
+    true wind speed (kt) and angle (deg) experienced. reached: whether
+    the finish radius was entered; passage_hours/distance_nm: the
+    outcome; budget_bytes: the per-cycle budget this passage ran under;
+    cycles: the per-cycle records.
+    """
 
     lat: np.ndarray
     lon: np.ndarray
-    time: np.ndarray  # absolute hours since passage start
+    time: np.ndarray
     heading: np.ndarray
-    speed: np.ndarray  # kt achieved on the true wind
-    tws: np.ndarray  # true wind speed experienced (kt)
-    twa: np.ndarray  # true wind angle experienced (deg)
+    speed: np.ndarray
+    tws: np.ndarray
+    twa: np.ndarray
     reached: bool
     passage_hours: float
     distance_nm: float

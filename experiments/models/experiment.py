@@ -15,6 +15,15 @@ from light_router.models.route import Route
 
 @dataclass
 class RouteMetrics:
+    """Degradation of one route vs the reference route, one axis per field.
+
+    Reported separately, never combined into a single score. eta/distance
+    diffs are percent of the reference; vmg and max-wind diffs are in
+    knots; initial_bearing_diff is degrees; geographic_divergence is the
+    mean nearest-track distance in nm (both tracks resampled to 50
+    equal-progress points). reached: whether the degraded route finished.
+    """
+
     eta_diff_pct: float
     distance_diff_pct: float
     vmg_diff_kt: float
@@ -31,6 +40,10 @@ class RouteMetrics:
 
 @dataclass
 class StaircaseRow:
+    """One staircase level: the budget, the config chosen under it, the
+    measured package size in bytes, the degradation metrics, and the
+    computed route. budget is the display label ("unlimited", "10 KB")."""
+
     budget: str
     budget_bytes: int | None
     package_bytes: int

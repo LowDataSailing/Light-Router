@@ -61,6 +61,11 @@ NOAA AWS S3 (archived GFS GRIB2)   NOMADS (current runs)   CHOM/InfoClimat (obse
   (Mode B) + `scenario.yaml` (start/finish, start time, polar file, router
   config, budget staircase).
 - **Format:** Zarr (chunked N-D, the climate-ML standard) + YAML config.
+  **Goal 1 deviation (ADR-0001):** experiment inputs are stored as
+  self-contained npz data packs (truth + one file per forecast cycle,
+  sha256 manifest, offline-rerunnable) — zero extra dependencies at a few
+  tens of MB; Zarr is reconsidered for the large reanalysis store in later
+  goals.
 - **Techno:** xarray + zarr.
 - **Idea:** forecast vs reality separation; one package = one episode
   (Gymnasium semantics).

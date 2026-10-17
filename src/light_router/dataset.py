@@ -52,8 +52,9 @@ def to_cf_dataset(grid: WeatherGrid) -> xr.Dataset:
 def grid_from_dataset(dataset: xr.Dataset) -> WeatherGrid:
     """Build the internal grid view from a canonical CF Dataset.
 
-    Validates the contract: dims (time, latitude, longitude), strictly
-    increasing axes, and at least the u10/v10 wind variables.
+    Checks the contract (dims time/latitude/longitude, u10/v10 present)
+    and sorts the axes ascending — ``WeatherGrid`` then enforces strictly
+    increasing axes at construction.
     """
     missing = [d for d in ("time", "latitude", "longitude") if d not in dataset.dims]
     if missing:

@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Communication-constrained, vessel-conditioned weather-routing system for low-bandwidth sailing"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
     {name = "Lilian Bosc", email = "contactlilian3@gmail.com"}
 ]
@@ -83,7 +83,7 @@ packages = ["src/light_router"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py312"
 exclude = [".venv", "site", "data/cache", "experiments/output"]
 
 [tool.ruff.lint]

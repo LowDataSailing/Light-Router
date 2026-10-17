@@ -18,8 +18,8 @@ from pathlib import Path
 import xarray as xr
 
 from light_router.dataset import grid_from_dataset, to_cf_dataset
+from experiments.models.degradation import DegradeConfig
 from experiments.harness.degrade import (
-    DegradeConfig,
     best_config_for_budget,
     degrade,
     package_size,

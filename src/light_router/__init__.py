@@ -19,6 +19,8 @@ Package layout:
   downloader, and experiment data packs
 """
 
+from __future__ import annotations
+
 from light_router.dataset import to_cf_dataset
 from light_router.models.forecast import ForecastCycle
 from light_router.models.vessel import PolarTable

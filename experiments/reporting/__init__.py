@@ -5,3 +5,5 @@ directory writer (``artifacts``), GPX/GeoJSON export (``export``), charts
 (``plots``), and the summarize CLI that re-renders a run without re-running
 the router.
 """
+
+from __future__ import annotations

@@ -96,10 +96,13 @@ def package_size(grid: WeatherGrid, config: DegradeConfig) -> int:
     The payload is the b-bit-packed quantized code array, which is what
     would actually be transmitted. The header is decodable on its own:
     a 4-byte big-endian length prefix, then a JSON document carrying the
-    variable names, the bit depth and the per-variable (vmin, vmax)
-    dequantization scales, then the strided time/lat/lon axes as float64.
-    A receiver can reconstruct the grid from header + payload without
-    any out-of-band knowledge.
+    variable names, the bit depth, the per-variable (vmin, vmax)
+    dequantization scales and the axis lengths (n_time, n_lat, n_lon),
+    then the strided time/lat/lon axes as float64. A receiver can
+    reconstruct the grid from header + payload without any out-of-band
+    knowledge: the axis lengths split the concatenated axes, and each
+    variable's payload is n_time * n_lat * n_lon codes at the stated bit
+    depth, in the header's variable order.
     """
     sliced = _sliced(grid, config)
     payload = b""
@@ -112,19 +115,25 @@ def package_size(grid: WeatherGrid, config: DegradeConfig) -> int:
             payload += _pack_codes(codes, config.bits)
             scales[name] = [vmin, vmax]
     compressed = zlib.compress(payload, level=9)
+    times = grid.times[:: config.temporal_stride]
+    lats = grid.lats[:: config.spatial_stride]
+    lons = grid.lons[:: config.spatial_stride]
     meta = json.dumps(
         {
             "variables": sorted(sliced),
             "bits": config.bits,
             "scales": scales,
+            "n_time": len(times),
+            "n_lat": len(lats),
+            "n_lon": len(lons),
         },
         separators=(",", ":"),
     ).encode()
     header = len(meta).to_bytes(4, "big") + meta
     header += (
-        grid.times[:: config.temporal_stride].astype(np.float64).tobytes()
-        + grid.lats[:: config.spatial_stride].astype(np.float64).tobytes()
-        + grid.lons[:: config.spatial_stride].astype(np.float64).tobytes()
+        times.astype(np.float64).tobytes()
+        + lats.astype(np.float64).tobytes()
+        + lons.astype(np.float64).tobytes()
     )
     return len(header) + len(compressed)
 

@@ -5,6 +5,8 @@
 every cycle, sail on the measured truth.
 """
 
+from __future__ import annotations
+
 from experiments.models.passage import CycleRecord, PassageResult
 from light_router.models.forecast import ForecastCycle
 from experiments.simulation.scenario import Scenario, surrogate_router_factory

@@ -6,3 +6,5 @@ artifacts, synthetic fixtures, and the experiment-domain records. The
 library proper (the router stack) is ``src/light_router``; experiments import
 from it, never the other way around.
 """
+
+from __future__ import annotations

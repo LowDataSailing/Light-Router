@@ -16,7 +16,10 @@ in the open-source ecosystem is adopted, not rebuilt.
   (dimensions: time, latitude, longitude; variables: u10, v10, later Hs /
   currents / msl; time = hours since forecast initialization).
 - Loaders produce it; routers and the harness consume it. On disk, scenario
-  packages store it as **Zarr**.
+  packages store it as **Zarr** — except Goal 1 experiment inputs, which are
+  self-contained **npz data packs** per ADR-0001 (zero extra dependencies at
+  a few tens of MB; Zarr is reconsidered for the large reanalysis store in
+  later goals).
 - Adding a data source = writing a loader. Nothing downstream changes.
 - The current `WeatherGrid` class is a transitional internal view; it must not
   appear in any public interface.

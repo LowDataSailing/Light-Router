@@ -110,15 +110,7 @@ def fetch_era5_wind_grid(
             batch_path.write_text(json.dumps(result))
         locations.extend(result)
 
-    times = _hours_since_start(locations[0]["hourly"]["time"], start_date)
-    n_time = len(times)
-    speed = np.empty((len(points), n_time), dtype=np.float32)
-    direction = np.empty((len(points), n_time), dtype=np.float32)
-    for j, loc in enumerate(locations):
-        if len(loc["hourly"]["time"]) != n_time:
-            raise ValueError("ERA5 locations returned mismatched time axes")
-        speed[j] = np.asarray(loc["hourly"]["wind_speed_10m"], dtype=np.float32)
-        direction[j] = np.asarray(loc["hourly"]["wind_direction_10m"], dtype=np.float32)
+    times, speed, direction = _point_arrays(locations, len(points), start_date)
 
     if cache_path is not None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -127,20 +119,82 @@ def fetch_era5_wind_grid(
     return _grid_from_arrays(lat_values, lon_values, times, speed, direction)
 
 
+def _point_arrays(
+    locations: list[dict], n_points: int, start_date: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Times (h since start) and per-point speed/direction columns from the
+    API responses, checking every point returned the same time axis."""
+    if len(locations) != n_points:
+        raise ValueError(
+            f"ERA5 returned {len(locations)} locations, expected {n_points}"
+        )
+    times = _hours_since_start(locations[0]["hourly"]["time"], start_date)
+    n_time = len(times)
+    speed = np.empty((n_points, n_time), dtype=np.float32)
+    direction = np.empty_like(speed)
+    for j, loc in enumerate(locations):
+        if len(loc["hourly"]["time"]) != n_time:
+            raise ValueError("ERA5 locations returned mismatched time axes")
+        speed[j] = np.asarray(loc["hourly"]["wind_speed_10m"], dtype=np.float32)
+        direction[j] = np.asarray(loc["hourly"]["wind_direction_10m"], dtype=np.float32)
+    return times, speed, direction
+
+
 def _grid_from_cache(
     cache_path: Path, lats: np.ndarray, lons: np.ndarray, start_date: str
 ) -> xr.Dataset:
+    """Rebuild the grid from the cached point responses.
+
+    The cache is only valid for the region and grid shape it was fetched
+    for: the cached locations must form a row-major grid matching the
+    requested lats/lons — same point count, same ordering pattern, and an
+    extent within 0.5 deg of the request (the API resolves coordinates
+    onto its own grid, so exact equality cannot be required). Anything
+    else rejects the cache: delete it or pass a fresh ``cache_path``.
+    """
     locations = json.loads(cache_path.read_text())
     lat_values = np.asarray(lats, dtype=float)
     lon_values = np.asarray(lons, dtype=float)
-    times = _hours_since_start(locations[0]["hourly"]["time"], start_date)
-    n_time = len(times)
-    speed = np.empty((len(lat_values) * len(lon_values), n_time), dtype=np.float32)
-    direction = np.empty_like(speed)
-    for j, loc in enumerate(locations):
-        speed[j] = np.asarray(loc["hourly"]["wind_speed_10m"], dtype=np.float32)
-        direction[j] = np.asarray(loc["hourly"]["wind_direction_10m"], dtype=np.float32)
+    _check_cached_grid(locations, lat_values, lon_values)
+    times, speed, direction = _point_arrays(
+        locations, len(lat_values) * len(lon_values), start_date
+    )
     return _grid_from_arrays(lat_values, lon_values, times, speed, direction)
+
+
+def _check_cached_grid(
+    locations: list[dict], lat_values: np.ndarray, lon_values: np.ndarray
+) -> None:
+    """Reject a cache fetched for a different region or grid shape."""
+    n_lat, n_lon = len(lat_values), len(lon_values)
+    if len(locations) != n_lat * n_lon:
+        raise ValueError(
+            f"ERA5 cache holds {len(locations)} points, the requested grid "
+            f"needs {n_lat * n_lon} — it was fetched for a different region; "
+            f"delete the cache file or pass a new cache_path"
+        )
+    cached_lats = [float(loc["latitude"]) for loc in locations]
+    cached_lons = [float(loc["longitude"]) for loc in locations]
+    for j in range(len(locations)):
+        row, col = divmod(j, n_lon)
+        if (
+            abs(cached_lats[j] - cached_lats[row * n_lon]) > 1e-6
+            or abs(cached_lons[j] - cached_lons[col]) > 1e-6
+        ):
+            raise ValueError(
+                "ERA5 cache points are not in the requested row-major grid "
+                "order; delete the cache file or pass a new cache_path"
+            )
+    if (
+        min(cached_lats) < float(lat_values.min()) - 0.5
+        or max(cached_lats) > float(lat_values.max()) + 0.5
+        or min(cached_lons) < float(lon_values.min()) - 0.5
+        or max(cached_lons) > float(lon_values.max()) + 0.5
+    ):
+        raise ValueError(
+            "ERA5 cache extent does not cover the requested region; delete "
+            "the cache file or pass a new cache_path"
+        )
 
 
 def _grid_from_arrays(

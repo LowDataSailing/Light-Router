@@ -6,6 +6,8 @@ speaks the canonical CF Dataset and the Router protocol, so the oracle is
 swappable without touching it.
 """
 
+from __future__ import annotations
+
 from experiments.harness.degrade import (
     DegradeConfig,
     best_config_for_budget,

@@ -21,6 +21,12 @@ BASE_URL = "https://climato.chom.engineering"
 
 @dataclass(frozen=True)
 class Station:
+    """One CHOM observation station.
+
+    ic_id: CHOM station identifier. latitude/longitude: decimal degrees
+    (WGS84). parameters: CHOM parameter codes the station reports.
+    """
+
     ic_id: str
     name: str
     latitude: float
