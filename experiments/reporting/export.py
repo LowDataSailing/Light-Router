@@ -8,10 +8,22 @@ plain JSON. Both are lazy so the core install stays numpy-only.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from light_router.routing import Route
+
+
+def _json_float(value: object) -> float | None:
+    """JSON-safe float: ``None`` for non-finite values.
+
+    Routes pad waypoint 0 with NaN (heading/speed/tws/twa) and carry
+    NaN eta/distance when unreached; bare ``NaN`` tokens are invalid JSON
+    for browsers and strict parsers (issue #23), so they export as ``null``.
+    """
+    number = float(value)
+    return number if math.isfinite(number) else None
 
 
 def _require_gpxpy():
@@ -66,8 +78,8 @@ def route_to_geojson(route: Route, name: str) -> dict[str, object]:
         "properties": {
             "name": name,
             "reached": bool(route.reached),
-            "eta_hours": float(route.eta_hours),
-            "distance_nm": float(route.distance_nm),
+            "eta_hours": _json_float(route.eta_hours),
+            "distance_nm": _json_float(route.distance_nm),
         },
         "geometry": {
             "type": "LineString",
@@ -75,11 +87,11 @@ def route_to_geojson(route: Route, name: str) -> dict[str, object]:
         },
         "points": [
             {
-                "time_h": float(route.time[i]),
-                "speed_kt": float(route.speed[i]),
-                "heading_deg": float(route.heading[i]),
-                "tws_kt": float(route.tws[i]),
-                "twa_deg": float(route.twa[i]),
+                "time_h": _json_float(route.time[i]),
+                "speed_kt": _json_float(route.speed[i]),
+                "heading_deg": _json_float(route.heading[i]),
+                "tws_kt": _json_float(route.tws[i]),
+                "twa_deg": _json_float(route.twa[i]),
             }
             for i in range(route.n_waypoints)
         ],
@@ -91,7 +103,11 @@ def write_route_files(run_dir: Path, route: Route, name: str) -> None:
     gpx_path = run_dir / f"{name}.gpx"
     gpx_path.write_text(route_to_gpx(route, name))
     geojson_path = run_dir / f"{name}.geojson"
-    geojson_path.write_text(json.dumps(route_to_geojson(route, name), indent=2) + "\n")
+    # allow_nan=False: a NaN reaching this writer is a bug — fail loudly
+    # rather than emit an invalid-JSON artifact (issue #23).
+    geojson_path.write_text(
+        json.dumps(route_to_geojson(route, name), indent=2, allow_nan=False) + "\n"
+    )
 
 
 def read_routes(run_dir: Path) -> dict[str, list[tuple[float, float]]]:
