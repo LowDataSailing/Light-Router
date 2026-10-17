@@ -63,7 +63,11 @@ from experiments.reporting.artifacts import (  # noqa: E402
 )
 from light_router.weather_data.era5 import fetch_era5_wind_grid  # noqa: E402
 from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
-from light_router.weather_data.pack import load_pack, write_pack  # noqa: E402
+from light_router.weather_data.pack import (  # noqa: E402
+    load_pack,
+    read_pack_manifest,
+    write_pack,
+)
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
 from light_router.routing import RouterConfig  # noqa: E402
 from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
@@ -210,7 +214,12 @@ def main() -> int:
     budgets = parse_budgets(args.budgets)
     extent = route_grid_box(start_pos, finish_pos, margin_deg=args.margin)
 
+    # Date the run's provenance reports: the pack's own when replaying a
+    # pack (the CLI default would lie), the CLI date when fetching fresh.
+    run_start_date = args.start_date
     if args.pack:
+        pack_source = read_pack_manifest(Path(args.pack)).get("source", {})
+        run_start_date = str(pack_source.get("start_date", args.start_date))
         truth, cycles = load_pack(Path(args.pack))
         print(
             f"pack {args.pack}: truth {truth.sizes['time']} steps "
@@ -279,7 +288,7 @@ def main() -> int:
                 "type": "operational",
                 "truth": "ERA5 (Open-Meteo archive API)",
                 "forecasts": "GFS 0.25 deg (NOAA AWS archive)",
-                "start_date": args.start_date,
+                "start_date": run_start_date,
                 "cycle_hours": 6,
                 **({"pack": args.pack} if args.pack else {}),
             },

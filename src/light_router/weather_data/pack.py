@@ -23,6 +23,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -124,16 +125,26 @@ def write_pack(
     return pack_dir
 
 
-def load_pack(
-    pack_dir: Path, *, verify: bool = True
-) -> tuple[xr.Dataset, list[ForecastCycle]]:
-    """Load a data pack: (truth, cycles), checksums verified by default."""
+def read_pack_manifest(pack_dir: Path) -> dict[str, Any]:
+    """The pack's ``pack.json`` as a dict: provenance for a pack replay.
+
+    ``load_pack`` returns only the data; callers that also need the
+    pack's own provenance (scenario, source, start date) read it here.
+    """
     manifest = json.loads((pack_dir / PACK_MANIFEST).read_text())
     if manifest["schema_version"] != SCHEMA_VERSION:
         raise ValueError(
             f"pack schema version {manifest['schema_version']} is not "
             f"supported (expected {SCHEMA_VERSION})"
         )
+    return manifest
+
+
+def load_pack(
+    pack_dir: Path, *, verify: bool = True
+) -> tuple[xr.Dataset, list[ForecastCycle]]:
+    """Load a data pack: (truth, cycles), checksums verified by default."""
+    manifest = read_pack_manifest(pack_dir)
 
     for name, expected in manifest["files_sha256"].items():
         path = pack_dir / name
