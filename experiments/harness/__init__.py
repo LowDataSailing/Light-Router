@@ -3,7 +3,7 @@
 ``degrade`` is the bandwidth pipeline, ``staircase`` is the budget-staircase
 experiment runner, ``metrics`` is the route-quality comparison. The harness
 speaks the canonical CF Dataset and the Router protocol, so the oracle is
-swappable without touching it.
+swappable without touching the harness itself.
 """
 
 from __future__ import annotations
