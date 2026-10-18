@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import numpy as np
 
 from light_router.models.weather import WeatherGrid
+
+SYNTHETIC_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
+"""Calendar anchor of the synthetic scenarios' hour-based time axis.
+
+Synthetic fields measure time in hours since forecast initialization with
+no calendar date; oracle routers that speak wall-clock time (the OpenCPN
+scenario ``startTime``, libweatherrouting datetimes) anchor hour 0 here.
+Real data packs pass their own forecast initialization time instead.
+"""
 
 
 def trade_wind_field(

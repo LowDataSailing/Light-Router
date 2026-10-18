@@ -69,6 +69,12 @@ artifacts = [
 plot = [
     "matplotlib>=3.7",
 ]
+# Oracle reference routers (issue #22). Optional on purpose: libweatherrouting
+# is GPLv3, so it must never be a core dependency and is imported lazily
+# inside experiments/oracle/libweatherrouting.py only.
+oracle = [
+    "weatherrouting>=0.2.3",
+]
 # ml = [
 #     "scikit-learn>=1.2.0",
 #     "torch>=2.0.0",
