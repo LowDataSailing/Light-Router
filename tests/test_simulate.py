@@ -163,7 +163,7 @@ def test_no_cycles_raises():
         )
 
 
-# --- issues #14/#15/#17/#18/#19: ledger, decision log, monitoring ------------
+# --- ledger, decision log, monitoring ------------
 
 
 def run_passage(wind_kt=15.0, truth_wind_kt=None, **kwargs):
@@ -186,7 +186,7 @@ def test_cycle_records_carry_the_decision_log():
     records = result.cycles
     assert len(records) >= 2
     first, later = records[0], records[1]
-    # helm decision + plan identity (issue #15)
+    # helm decision + plan identity
     assert first.planned_bearing_deg is not None
     assert 0.0 <= first.planned_bearing_deg < 360.0
     assert len(first.plan_checksum) == 16
@@ -194,18 +194,18 @@ def test_cycle_records_carry_the_decision_log():
     assert first.churn_nm is None and first.execution_error_nm is None
     assert later.churn_nm is not None and later.churn_nm >= 0.0
     assert later.execution_error_nm is not None and later.execution_error_nm >= 0.0
-    # belief error (issue #15): filled for reached plans, small on a
+    # belief error: filled for reached plans, small on a
     # perfect forecast
     assert all(r.belief_error_h is not None for r in records)
     assert all(abs(r.belief_error_h) < 10.0 for r in records)
-    # forecast error (issue #17): recorded every data cycle. On this
+    # forecast error: recorded every data cycle. On this
     # fixture each cycle replays the passage-start field, so the error is
     # the temporal modulation gap — small but nonzero, and staleness is 0
     # (runs are consumed exactly at their init time).
     assert all(r.forecast_error_kt is not None for r in records)
     assert all(0.0 <= r.forecast_error_kt < 5.0 for r in records)
     assert all(r.forecast_staleness_h == 0.0 for r in records)
-    # compute time (issue #19) recorded, non-negative
+    # compute time recorded, non-negative
     assert all(
         r.compute_seconds is not None and r.compute_seconds >= 0.0 for r in records
     )
@@ -220,7 +220,7 @@ def test_bandwidth_ledger_accumulates():
 
 
 def test_forecast_error_exposed_on_a_bad_forecast():
-    # the router believes 15 kt trades; the truth is calm (issue #17)
+    # the router believes 15 kt trades; the truth is calm
     result = run_passage(wind_kt=15.0, truth_wind_kt=0.05, max_hours=24.0)
     assert all(r.forecast_error_kt > 10.0 for r in result.cycles)
 

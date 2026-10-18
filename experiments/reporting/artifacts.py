@@ -76,8 +76,8 @@ def write_manifest(
 ) -> Path:
     """Write manifest.json: config, code version, data provenance.
 
-    ``router`` (algorithm name, issue #16) and ``polar`` (source +
-    checksum, issue #16) record *what* defined the routing model, next to
+    ``router`` (algorithm name) and ``polar`` (source +
+    checksum) record *what* defined the routing model, next to
     the parameters and data provenance — an oracle swap or a polar change
     must be visible in the artifact.
     """
@@ -191,9 +191,9 @@ def _write_passage_csv(
 ) -> None:
     """One row per budget: the actual passage outcome on measured weather.
 
-    Experienced-weather columns (issue #18) make the safety review possible:
+    Experienced-weather columns make the safety review possible:
     a budget must buy ETA in time/VMG, never in weather. ``cost_eur``
-    (issue #14) prices the delivered bytes at ``price_per_kb`` (Decision
+    prices the delivered bytes at ``price_per_kb`` (Decision
     #21: delivered package bytes only); empty when no price is configured.
     """
     lines = [
@@ -221,7 +221,7 @@ def _write_passage_csv(
 
 def _write_cycles_csv(path: Path, results: list[PassageResult]) -> None:
     """One row per planning cycle: what the router received, decided and
-    believed (issues #14, #15, #17, #19). Empty cell = not applicable
+    believed. Empty cell = not applicable
     (no data cycle, first plan, unreached, ...). ``compute_s`` is the one
     non-deterministic column — exclude it from artifact-equality checks
     (Decision #18)."""
@@ -305,8 +305,8 @@ def write_operational_artifacts(
 
     ``truth`` is the measured-weather grid the boat actually sailed on; it
     feeds the manifest provenance checksum, the wind snapshot and the plot
-    underlay. ``router``/``polar`` record the routing-model identity
-    (issue #16); ``price_per_kb`` prices the bandwidth ledger (issue #14).
+    underlay. ``router``/``polar`` record the routing-model identity;
+    ``price_per_kb`` prices the bandwidth ledger.
     """
     from experiments.reporting.export import write_route_files
     from experiments.reporting.plots import write_operational_plots

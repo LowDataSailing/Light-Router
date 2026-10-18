@@ -133,10 +133,10 @@ def test_passage_csv_rows(run_dir, results):
     )
     assert len(lines) == len(passage_results) + 1
     assert lines[1].startswith("unlimited,")
-    # cost model (issue #14): delivered bytes priced at 0.01 EUR/KB
+    # cost model: delivered bytes priced at 0.01 EUR/KB
     row = lines[1].split(",")
     assert row[2] == f"{passage_results[0].total_package_bytes / 1000 * 0.01:.2f}"
-    # experienced weather (issue #18) and compute time (issue #19) present
+    # experienced weather and compute time present
     assert 0.0 < float(row[6]) <= 40.0  # max_tws_kt
     assert 0.0 <= float(row[8]) <= 100.0  # pct_upwind
     assert float(row[10]) >= 0.0  # compute_total_s
@@ -154,7 +154,7 @@ def test_cycles_csv_rows(run_dir, results):
     n_cycles = sum(len(r.cycles) for r in passage_results)
     assert len(lines) == n_cycles + 1
     assert "unlimited,0.0," in lines[1]
-    # bandwidth ledger (issue #14): cumulative bytes never decrease per budget
+    # bandwidth ledger: cumulative bytes never decrease per budget
     for result in passage_results:
         rows = [
             ln.split(",")
@@ -171,7 +171,7 @@ def test_operational_manifest(run_dir):
     assert manifest["scenario"] == "operational_test"
     assert manifest["staircase"] == BUDGETS
     assert manifest["source"]["truth"] == "synthetic"
-    # routing-model identity (issue #16): algorithm + polar provenance
+    # routing-model identity: algorithm + polar provenance
     assert manifest["router"]["algorithm"] == "isochrone-surrogate"
     assert manifest["polar"]["source"] == "synthetic_cruising_polar"
     assert manifest["polar"]["checksum"] == synthetic_cruising_polar().checksum

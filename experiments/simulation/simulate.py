@@ -161,7 +161,7 @@ def simulate_passage(
         great_circle_distance(state.lat, state.lon, finish[0], finish[1])
         <= finish_radius_nm
     )
-    # belief error (issue #15): what each cycle believed about arrival vs the
+    # belief error: what each cycle believed about arrival vs the
     # actual arrival — nearly free, both sides already exist.
     if reached:
         for record in state.records:
@@ -198,9 +198,9 @@ def _replan_due_cycles(
     """Planning cycle: consume every due forecast run (latest wins), compress
     the newest to the budget, and replan from the boat's current position.
 
-    Records the decision log (issue #15), the forecast error and staleness
-    (issue #17), the bandwidth ledger (issue #14) and the replan compute
-    time (issue #19) on each :class:`CycleRecord`.
+    Records the decision log, the forecast error and staleness, the
+    bandwidth ledger and the replan compute time on each
+    :class:`CycleRecord`.
     """
     while (
         state.cycle_idx < len(cycles) and cycles[state.cycle_idx].init_hour <= state.t
@@ -222,7 +222,7 @@ def _replan_due_cycles(
             )
             record.compute_seconds = time.perf_counter() - started
 
-            # decision log (issue #15): what the router decided, not just
+            # decision log: what the router decided, not just
             # received — bearing, plan identity, churn, execution error.
             record.planned_bearing_deg = (
                 route_bearing(plan) if plan.n_waypoints > 1 else None
@@ -239,7 +239,7 @@ def _replan_due_cycles(
                     great_circle_distance(state.lat, state.lon, pred_lat, pred_lon)
                 )
 
-            # forecast-vs-truth error at the boat (issue #17): what the
+            # forecast-vs-truth error at the boat: what the
             # router believed (degraded forecast) against what is true.
             fc_speed, _ = package.grid.wind(
                 np.asarray(state.t - cycle.init_hour),
@@ -262,7 +262,7 @@ def _replan_due_cycles(
             state.plan_init = cycle.init_hour
         # budget unreachable even fully degraded: no data this cycle, the
         # boat keeps following the previous plan (record already says so)
-        # bandwidth ledger (issue #14): cumulative delivered bytes by cycle.
+        # bandwidth ledger: cumulative delivered bytes by cycle.
         state.ledger_bytes += record.package_bytes
         record.cumulative_bytes = state.ledger_bytes
         state.records.append(record)
@@ -270,7 +270,7 @@ def _replan_due_cycles(
 
 
 def _plan_checksum(plan: Route) -> str:
-    """Short SHA-256 over the planned track — plan identity (issue #15)."""
+    """Short SHA-256 over the planned track — plan identity."""
     h = hashlib.sha256()
     for arr in (plan.lat, plan.lon, plan.time):
         h.update(np.ascontiguousarray(arr, dtype=float).tobytes())
@@ -281,7 +281,7 @@ def _plan_divergence_nm(
     prev: Route, prev_init: float, new: Route, new_init: float
 ) -> float | None:
     """Mean distance (nm) between two plans over their overlapping absolute
-    time window — plan-to-plan churn (issue #15).
+    time window — plan-to-plan churn.
 
     Plan time axes are lead hours since their own run's initialization;
     absolute time = lead + init. Returns None when the plans do not overlap.
@@ -382,7 +382,7 @@ def format_operational_summary(
 ) -> str:
     """Human-readable operational table: budget vs actual passage.
 
-    ``price_per_kb`` (EUR/KB, issue #14) adds the bandwidth-price column —
+    ``price_per_kb`` (EUR/KB) adds the bandwidth-price column —
     the cost of each passage's delivered bytes (Decision #21: delivered
     package bytes only).
     """

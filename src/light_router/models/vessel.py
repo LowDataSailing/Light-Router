@@ -45,7 +45,7 @@ class PolarTable:
     @property
     def checksum(self) -> str:
         """SHA-256 over the table axes and speeds — the polar's provenance
-        fingerprint for run manifests (issue #16): which boat ran the
+        fingerprint for run manifests: which boat ran the
         route must be visible in the artifact."""
         h = hashlib.sha256()
         for arr in (self.tws, self.twa, self.speed):
