@@ -22,7 +22,7 @@ from experiments.reporting.artifacts import (
     WIND_SNAPSHOT_NAME,
 )
 from experiments.reporting.export import read_routes
-from light_router.routing import Route
+from light_router.models.route import Route, Waypoint
 from experiments.reporting.plots import (
     plot_degradation,
     plot_size_fidelity,
@@ -35,13 +35,7 @@ from experiments.harness.metrics import RouteMetrics
 def _empty_route() -> Route:
     """Placeholder route for rows rebuilt from CSV (tracks come from GPX)."""
     return Route(
-        lat=np.empty(0),
-        lon=np.empty(0),
-        time=np.empty(0),
-        heading=np.empty(0),
-        speed=np.empty(0),
-        tws=np.empty(0),
-        twa=np.empty(0),
+        waypoints=[],
         reached=False,
         eta_hours=0.0,
         distance_nm=0.0,
@@ -102,13 +96,10 @@ def _routes_from_gpx(run_dir: Path) -> dict[str, Route]:
         lats, lons = zip(*points)
         n = len(lats)
         routes[name.removeprefix("route_")] = Route(
-            lat=np.asarray(lats),
-            lon=np.asarray(lons),
-            time=np.arange(n, dtype=float),
-            heading=np.zeros(n),
-            speed=np.zeros(n),
-            tws=np.zeros(n),
-            twa=np.zeros(n),
+            waypoints=[
+                Waypoint(lat=float(la), lon=float(lo), time=float(i))
+                for i, (la, lo) in enumerate(zip(lats, lons))
+            ],
             reached=True,
             eta_hours=float(n),
             distance_nm=0.0,

@@ -17,7 +17,7 @@ from experiments.reporting.artifacts import (
 )
 from experiments.harness.staircase import budget_label
 from light_router.dataset import to_cf_dataset
-from light_router.routing import RouterConfig
+from light_router.routing import IsochroneRouter, RouterConfig
 from experiments.synthetic_polar import synthetic_cruising_polar
 from experiments.simulation.simulate import run_operational_staircase
 from experiments.synthetic import trade_wind_field
@@ -53,6 +53,9 @@ def results():
 
     weather = make_weather()
     cycles = [ForecastCycle(init_hour=h, weather=weather) for h in (0.0, 6.0, 12.0)]
+    router = IsochroneRouter.from_dataset(
+        weather, synthetic_cruising_polar(), ROUTER_CONFIG
+    )
     return (
         weather,
         run_operational_staircase(
@@ -60,9 +63,9 @@ def results():
             cycles,
             START,
             FINISH,
+            router,
             synthetic_cruising_polar(),
             BUDGETS,
-            ROUTER_CONFIG,
             max_hours=60.0,
         ),
     )

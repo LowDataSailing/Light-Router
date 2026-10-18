@@ -12,7 +12,11 @@ import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import numpy as np
+
+from light_router.models.weather import WeatherGrid
 from light_router.routing import Route
+from light_router.sampling import wind_along_route
 
 
 def _json_float(value: object) -> float | None:
@@ -67,12 +71,25 @@ def route_to_gpx(route: Route, name: str, start_time: datetime | None = None) ->
     return gpx.to_xml()
 
 
-def route_to_geojson(route: Route, name: str) -> dict[str, object]:
-    """Serialize a route as a GeoJSON Feature (LineString + per-point props)."""
+def route_to_geojson(
+    route: Route, name: str, weather: WeatherGrid | None = None
+) -> dict[str, object]:
+    """Serialize a route as a GeoJSON Feature (LineString + per-point props).
+
+    Per-point wind (``tws_kt``/``twa_deg``) is sampled from ``weather`` —
+    the grid the route was planned against or sailed on; without a grid
+    those properties are ``null`` (a route is waypoints only).
+    """
     coordinates = [
         [round(float(lon), 6), round(float(lat), 6)]
         for lat, lon in zip(route.lat, route.lon)
     ]
+    tws: list[float | None] = [None] * route.n_waypoints
+    twa: list[float | None] = [None] * route.n_waypoints
+    if weather is not None:
+        tws_arr, twa_arr = wind_along_route(weather, route)
+        tws = [None if np.isnan(v) else float(v) for v in tws_arr]
+        twa = [None if np.isnan(v) else float(v) for v in twa_arr]
     return {
         "type": "Feature",
         "properties": {
@@ -90,15 +107,17 @@ def route_to_geojson(route: Route, name: str) -> dict[str, object]:
                 "time_h": _json_float(route.time[i]),
                 "speed_kt": _json_float(route.speed[i]),
                 "heading_deg": _json_float(route.heading[i]),
-                "tws_kt": _json_float(route.tws[i]),
-                "twa_deg": _json_float(route.twa[i]),
+                "tws_kt": tws[i],
+                "twa_deg": twa[i],
             }
             for i in range(route.n_waypoints)
         ],
     }
 
 
-def write_route_files(run_dir: Path, route: Route, name: str) -> None:
+def write_route_files(
+    run_dir: Path, route: Route, name: str, weather: WeatherGrid | None = None
+) -> None:
     """Write ``<name>.gpx`` and ``<name>.geojson`` into the run directory."""
     gpx_path = run_dir / f"{name}.gpx"
     gpx_path.write_text(route_to_gpx(route, name))
@@ -106,7 +125,8 @@ def write_route_files(run_dir: Path, route: Route, name: str) -> None:
     # allow_nan=False: a NaN reaching this writer is a bug — fail loudly
     # rather than emit an invalid-JSON artifact (issue #23).
     geojson_path.write_text(
-        json.dumps(route_to_geojson(route, name), indent=2, allow_nan=False) + "\n"
+        json.dumps(route_to_geojson(route, name, weather), indent=2, allow_nan=False)
+        + "\n"
     )
 
 

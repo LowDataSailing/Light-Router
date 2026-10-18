@@ -1,13 +1,13 @@
-"""Compatibility rules 2 and 3: Scenario + Router factory + Gymnasium semantics."""
+"""Compatibility rules 2 and 3: Scenario + Router protocol + Gymnasium semantics."""
 
 from __future__ import annotations
 
 import numpy as np
 
 from light_router.dataset import to_cf_dataset
-from light_router.routing import Router, RouterConfig
+from light_router.routing import IsochroneRouter, Router, RouterConfig
 from experiments.synthetic_polar import synthetic_cruising_polar
-from experiments.simulation.scenario import Scenario, surrogate_router_factory
+from experiments.simulation.scenario import Scenario
 from experiments.harness.staircase import STAIRCASE
 from experiments.synthetic import trade_wind_field
 
@@ -24,16 +24,22 @@ def make_weather():
     )
 
 
-def test_surrogate_factory_returns_router():
+def make_router(weather):
+    return IsochroneRouter.from_dataset(weather, synthetic_cruising_polar())
+
+
+def test_router_satisfies_protocol_and_rebinds():
     weather = make_weather()
-    factory = surrogate_router_factory(synthetic_cruising_polar())
-    router = factory(weather)
+    router = make_router(weather)
     assert isinstance(router, Router)  # runtime_checkable protocol
+    rebound = router.for_weather(weather)
+    assert isinstance(rebound, Router)
 
 
 def test_scenario_runs_staircase():
     scenario = Scenario(weather=make_weather(), start=START, finish=FINISH)
-    factory = surrogate_router_factory(
+    router = IsochroneRouter.from_dataset(
+        scenario.weather,
         synthetic_cruising_polar(),
         RouterConfig(
             dt_hours=4.0,
@@ -44,7 +50,7 @@ def test_scenario_runs_staircase():
             max_hours=250.0,
         ),
     )
-    result = scenario.run(factory)
+    result = scenario.run(router)
     assert result.reference.reached
     assert [row.budget_bytes for row in result.rows] == [budget for budget in STAIRCASE]
 
@@ -56,7 +62,8 @@ def test_scenario_custom_staircase():
         finish=FINISH,
         staircase=[None, 10_000],
     )
-    factory = surrogate_router_factory(
+    router = IsochroneRouter.from_dataset(
+        scenario.weather,
         synthetic_cruising_polar(),
         RouterConfig(
             dt_hours=4.0,
@@ -67,7 +74,7 @@ def test_scenario_custom_staircase():
             max_hours=250.0,
         ),
     )
-    result = scenario.run(factory)
+    result = scenario.run(router)
     assert len(result.rows) == 2
     assert result.rows[0].budget == "unlimited"
 

@@ -3,7 +3,9 @@
 From each reachable point at time t, expand candidate headings, move each
 candidate by its polar speed over one time step, prune dominated points by
 geographic bin, and repeat until a point reaches the finish. The route is
-reconstructed by backtracking parent pointers.
+reconstructed by backtracking parent pointers into a suite of waypoints —
+the router outputs the plan only; weather along it is sampled downstream
+(Decision #22).
 
 This module is the in-repo adapter over the Router seam
 (``light_router.routing.protocol``); the industry oracle subprocess is the
@@ -19,7 +21,7 @@ import numpy as np
 import xarray as xr
 
 from light_router.geo import destination, great_circle_distance
-from light_router.models.route import Route, RouterConfig
+from light_router.models.route import Route, RouterConfig, Waypoint
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import WeatherGrid
 from light_router.routing.protocol import BaseRouter
@@ -32,10 +34,6 @@ class _Level:
     lat: np.ndarray
     lon: np.ndarray
     parent: np.ndarray  # index into the previous level
-    heading: np.ndarray
-    speed: np.ndarray
-    tws: np.ndarray
-    twa: np.ndarray
 
 
 @dataclass
@@ -52,6 +50,10 @@ class IsochroneRouter(BaseRouter):
     grid: WeatherGrid
     polar: PolarTable
     config: RouterConfig = field(default_factory=RouterConfig)
+
+    name = "isochrone-surrogate"
+    """Algorithm identity for run manifests — not the oracle
+    (Decision #15); validated against it before results depend on it."""
 
     @classmethod
     def from_dataset(
@@ -95,10 +97,6 @@ class IsochroneRouter(BaseRouter):
             lat=np.array([start[0]]),
             lon=np.array([start[1]]),
             parent=np.array([-1]),
-            heading=np.array([np.nan]),
-            speed=np.array([np.nan]),
-            tws=np.array([np.nan]),
-            twa=np.array([np.nan]),
         )
         t = start_time
         while t - start_time <= cfg.max_hours:
@@ -133,10 +131,6 @@ class IsochroneRouter(BaseRouter):
                     candidates.lat[kept],
                     candidates.lon[kept],
                     candidates.parent[kept],
-                    candidates.heading[kept],
-                    candidates.speed[kept],
-                    candidates.tws[kept],
-                    candidates.twa[kept],
                 )
             )
             current = levels[-1]
@@ -179,10 +173,6 @@ class IsochroneRouter(BaseRouter):
             lat=new_lat[sail],
             lon=new_lon[sail],
             parent=np.repeat(np.arange(len(current.lat)), len(headings))[sail.ravel()],
-            heading=np.tile(headings, len(current.lat))[sail.ravel()],
-            speed=speed[sail],
-            tws=np.repeat(tws[:, None], len(headings), axis=1)[sail],
-            twa=twa[sail],
         )
 
     def _arrival(self, remaining: np.ndarray) -> int | None:
@@ -234,43 +224,29 @@ class IsochroneRouter(BaseRouter):
         reached: bool,
     ) -> Route:
         """Rebuild the route ending at ``levels[level_no][point_idx]``."""
-        lats, lons, headings, speeds, twss, twas = [], [], [], [], [], []
+        lats, lons = [], []
         idx = point_idx
         for level in reversed(levels[: level_no + 1]):
             lats.append(level.lat[idx])
             lons.append(level.lon[idx])
-            headings.append(level.heading[idx])
-            speeds.append(level.speed[idx])
-            twss.append(level.tws[idx])
-            twas.append(level.twa[idx])
             idx = int(level.parent[idx])
         lats.append(start[0])
         lons.append(start[1])
-        headings.append(np.nan)
-        speeds.append(np.nan)
-        twss.append(np.nan)
-        twas.append(np.nan)
 
         lat = np.array(lats[::-1], dtype=float)
         lon = np.array(lons[::-1], dtype=float)
-        heading = np.array(headings[::-1], dtype=float)
-        speed = np.array(speeds[::-1], dtype=float)
-        tws = np.array(twss[::-1], dtype=float)
-        twa = np.array(twas[::-1], dtype=float)
         n = len(lat)
         time = start_time + np.arange(n) * self.config.dt_hours
         distance = float(
             np.sum(great_circle_distance(lat[:-1], lon[:-1], lat[1:], lon[1:]))
         )
         eta = float(time[-1]) if reached else float("nan")
+        waypoints = [
+            Waypoint(lat=float(la), lon=float(lo), time=float(ti))
+            for la, lo, ti in zip(lat, lon, time)
+        ]
         return Route(
-            lat=lat,
-            lon=lon,
-            time=time,
-            heading=heading,
-            speed=speed,
-            tws=tws,
-            twa=twa,
+            waypoints=waypoints,
             reached=reached,
             eta_hours=eta,
             distance_nm=distance,
@@ -279,13 +255,7 @@ class IsochroneRouter(BaseRouter):
     def _empty_route(self, start: tuple[float, float], start_time: float) -> Route:
         """Trivial route for a start already inside the finish radius."""
         return Route(
-            lat=np.array([start[0]]),
-            lon=np.array([start[1]]),
-            time=np.array([start_time]),
-            heading=np.array([np.nan]),
-            speed=np.array([np.nan]),
-            tws=np.array([np.nan]),
-            twa=np.array([np.nan]),
+            waypoints=[Waypoint(start[0], start[1], start_time)],
             reached=True,
             eta_hours=start_time,
             distance_nm=0.0,

@@ -1,9 +1,14 @@
 """Route and router configuration: the plan a router returns.
 
 ``Route`` is the interface's return type (Compatibility rule 2): every
-router — the in-repo isochrone surrogate and the future oracle subprocess —
-produces one. ``RouterConfig`` is the shared tuning surface; the helpers
-summarize a route for metrics and reporting.
+router — the in-repo isochrone surrogate and the oracle subprocess —
+produces one. A route is a suite of :class:`Waypoint` (the maritime
+ontology: positions with times); every geometric quantity (headings,
+leg speeds, distances) is derived from it, and the weather along a route
+is sampled where needed via :mod:`light_router.sampling` — a router
+outputs a plan, never weather beliefs (Decision #22). ``RouterConfig``
+is the isochrone router's own tuning surface; the helpers summarize a
+route for metrics and reporting.
 """
 
 from __future__ import annotations
@@ -12,34 +17,37 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from light_router.geo import great_circle_distance
+from light_router.geo import great_circle_distance, initial_bearing
+
+
+@dataclass
+class Waypoint:
+    """One point of a route: where the boat is, and when."""
+
+    lat: float
+    """Latitude (deg)."""
+
+    lon: float
+    """Longitude (deg)."""
+
+    time: float
+    """Hours since the scenario start."""
 
 
 @dataclass
 class Route:
-    """Computed route: parallel per-waypoint arrays plus route-level scalars."""
+    """Computed route: a suite of waypoints plus route-level scalars.
 
-    lat: np.ndarray
-    """Waypoint latitudes (deg), length ``n_waypoints``."""
+    The waypoints are the router's entire output. Per-waypoint arrays
+    (:attr:`lat`, :attr:`lon`, :attr:`time`) and leg properties
+    (:attr:`heading`, :attr:`speed`) are derived views over them; the
+    wind along the route is not stored — sample it from the weather the
+    route was planned against (or sailed on) via
+    :func:`light_router.sampling.wind_along_route`.
+    """
 
-    lon: np.ndarray
-    """Waypoint longitudes (deg), length ``n_waypoints``."""
-
-    time: np.ndarray
-    """Hours since the scenario start, one per waypoint."""
-
-    heading: np.ndarray
-    """Heading per waypoint (deg true); NaN at the start waypoint."""
-
-    speed: np.ndarray
-    """Boat speed per waypoint (kt, polar speed — no currents at Level 1)."""
-
-    tws: np.ndarray
-    """True wind speed per waypoint (kt)."""
-
-    twa: np.ndarray
-    """True wind angle per waypoint (deg): the absolute angle between
-    heading and wind direction (0 = dead upwind, 180 = dead downwind)."""
+    waypoints: list[Waypoint]
+    """The route's waypoints, in sailing order."""
 
     reached: bool
     """Whether the route entered the finish radius within the horizon."""
@@ -52,12 +60,53 @@ class Route:
 
     @property
     def n_waypoints(self) -> int:
-        return len(self.lat)
+        return len(self.waypoints)
+
+    @property
+    def lat(self) -> np.ndarray:
+        """Waypoint latitudes (deg), length ``n_waypoints``."""
+        return np.array([w.lat for w in self.waypoints], dtype=float)
+
+    @property
+    def lon(self) -> np.ndarray:
+        """Waypoint longitudes (deg), length ``n_waypoints``."""
+        return np.array([w.lon for w in self.waypoints], dtype=float)
+
+    @property
+    def time(self) -> np.ndarray:
+        """Hours since the scenario start, one per waypoint."""
+        return np.array([w.time for w in self.waypoints], dtype=float)
+
+    @property
+    def heading(self) -> np.ndarray:
+        """Heading of the leg arriving at each waypoint (deg true); NaN at
+        the start waypoint (no leg arrives there)."""
+        n = self.n_waypoints
+        out = np.full(n, np.nan)
+        if n >= 2:
+            lat, lon = self.lat, self.lon
+            out[1:] = initial_bearing(lat[:-1], lon[:-1], lat[1:], lon[1:])
+        return out
+
+    @property
+    def speed(self) -> np.ndarray:
+        """Speed over ground of the leg arriving at each waypoint (kt);
+        NaN at the start waypoint. With no currents (Level 1) this is the
+        polar speed the router planned at."""
+        n = self.n_waypoints
+        out = np.full(n, np.nan)
+        if n >= 2:
+            lat, lon, time = self.lat, self.lon, self.time
+            dist = great_circle_distance(lat[:-1], lon[:-1], lat[1:], lon[1:])
+            dt = time[1:] - time[:-1]
+            out[1:] = np.where(dt > 0, dist / dt, np.nan)
+        return out
 
 
 @dataclass
 class RouterConfig:
-    """Shared tuning surface for the isochrone router."""
+    """Tuning surface of the isochrone router (its own config — other
+    routers carry theirs as their own attributes)."""
 
     dt_hours: float = 1.0
     """Isochrone time step (h) — one expansion level per step."""

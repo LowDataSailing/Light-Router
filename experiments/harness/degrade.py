@@ -6,17 +6,69 @@ Order fixed by the Benchmark Harness spec:
 3. variable filtering (keep wind only)
 4. quantization (uniform b-bit per variable)
 5. lossless compression (zlib on the quantized payload — measured bytes)
+
+The pipeline is exposed as a :data:`CompressionMethod` — a callable from
+``(grid, budget)`` to a :class:`CompressedPackage` whose byte count is
+*measured*, never estimated (Decision #22). Adaptive acquisition (later
+goals) plugs in as another CompressionMethod.
 """
 
 from __future__ import annotations
 
 import json
 import zlib
+from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
 from experiments.models.degradation import DegradeConfig
 from light_router.models.weather import WeatherGrid
+
+
+@dataclass
+class CompressedPackage:
+    """One weather package as a router receives it.
+
+    The byte count is the honest transmitted size (decodable header +
+    zlib payload, measured not estimated) — the unit of account of the
+    bandwidth ledger and the cost model.
+    """
+
+    grid: WeatherGrid
+    """The degraded grid the router routes on."""
+
+    package_bytes: int
+    """Measured size of the package (bytes)."""
+
+    config: DegradeConfig | None
+    """The degradation config that produced the package; None for
+    compression methods that have no config to report."""
+
+
+CompressionMethod = Callable[[WeatherGrid, "int | None"], "CompressedPackage | None"]
+"""Constrain a weather grid to a byte budget.
+
+Returns the degraded grid with its measured package size, or ``None``
+when the budget cannot be met at all (no data this cycle)."""
+
+
+def budget_staircase_compression(
+    grid: WeatherGrid, budget_bytes: int | None
+) -> CompressedPackage | None:
+    """The Goal 1 degradation pipeline as a CompressionMethod.
+
+    Picks the highest-fidelity configuration whose package fits the
+    budget and degrades the grid with it.
+    """
+    config = best_config_for_budget(grid, budget_bytes)
+    if config is None:
+        return None
+    return CompressedPackage(
+        grid=degrade(grid, config),
+        package_bytes=package_size(grid, config),
+        config=config,
+    )
 
 
 def degrade(grid: WeatherGrid, config: DegradeConfig) -> WeatherGrid:

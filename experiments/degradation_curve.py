@@ -45,9 +45,9 @@ from light_router.weather_data.gfs import download_gfs_wind  # noqa: E402
 from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
 from light_router.dataset import dataset_extent, to_cf_dataset  # noqa: E402
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
-from light_router.routing import RouterConfig  # noqa: E402
+from light_router.routing import IsochroneRouter, RouterConfig  # noqa: E402
 from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
-from experiments.simulation.scenario import Scenario, surrogate_router_factory  # noqa: E402
+from experiments.simulation.scenario import Scenario  # noqa: E402
 from experiments.harness.staircase import STAIRCASE, format_summary, write_csv  # noqa: E402
 from experiments.synthetic import add_storm, trade_wind_field  # noqa: E402
 from light_router.models.weather import route_grid_box  # noqa: E402
@@ -144,11 +144,10 @@ def main() -> int:
         finish_radius_nm=25.0,
         max_hours=150.0,
     )
-    factory = surrogate_router_factory(
-        polar=synthetic_cruising_polar(),
-        config=router_config,
+    router = IsochroneRouter.from_dataset(
+        weather, synthetic_cruising_polar(), router_config
     )
-    result = scenario.run(factory)
+    result = scenario.run(router)
     rows = result.rows
 
     out = OUTPUT / "degradation_curve.csv"

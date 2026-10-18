@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from light_router.dataset import to_cf_dataset
-from light_router.routing import RouterConfig
+from light_router.routing import IsochroneRouter, RouterConfig
 from experiments.synthetic_polar import synthetic_cruising_polar
 from experiments.simulation.simulate import (
     ForecastCycle,
@@ -27,6 +27,13 @@ ROUTER_CONFIG = RouterConfig(
     finish_radius_nm=15.0,
     max_hours=60.0,
 )
+
+
+def make_router(weather):
+    """One router setup; the simulation re-binds it to every package."""
+    return IsochroneRouter.from_dataset(
+        weather, synthetic_cruising_polar(), ROUTER_CONFIG
+    )
 
 
 def make_weather(wind_kt: float = 15.0, direction_from_deg: float = 45.0):
@@ -55,8 +62,8 @@ def test_perfect_forecast_reaches():
         make_cycles(weather),
         START,
         FINISH,
+        make_router(weather),
         synthetic_cruising_polar(),
-        ROUTER_CONFIG,
         max_hours=60.0,
     )
     assert result.reached
@@ -71,8 +78,8 @@ def test_replans_at_cycle_boundaries():
         make_cycles(weather),
         START,
         FINISH,
+        make_router(weather),
         synthetic_cruising_polar(),
-        ROUTER_CONFIG,
         max_hours=60.0,
     )
     hours = [record.hour for record in result.cycles]
@@ -93,8 +100,8 @@ def test_budget_caps_each_package():
         make_cycles(weather),
         START,
         FINISH,
+        make_router(weather),
         synthetic_cruising_polar(),
-        ROUTER_CONFIG,
         budget_bytes=3000,
         max_hours=60.0,
     )
@@ -114,8 +121,8 @@ def test_boat_sails_on_truth_not_forecast():
         make_cycles(forecast),
         START,
         FINISH,
+        make_router(forecast),
         synthetic_cruising_polar(),
-        ROUTER_CONFIG,
         max_hours=24.0,
     )
     assert not result.reached
@@ -131,9 +138,9 @@ def test_staircase_runs_each_budget():
         make_cycles(weather),
         START,
         FINISH,
+        make_router(weather),
         synthetic_cruising_polar(),
         [None, 3000],
-        ROUTER_CONFIG,
         max_hours=60.0,
     )
     assert [r.budget_bytes for r in results] == [None, 3000]
@@ -151,6 +158,6 @@ def test_no_cycles_raises():
             [],
             START,
             FINISH,
+            make_router(weather),
             synthetic_cruising_polar(),
-            ROUTER_CONFIG,
         )

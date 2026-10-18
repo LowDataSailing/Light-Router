@@ -9,7 +9,13 @@ staircase and passage results) live in ``experiments/models/``.
 from __future__ import annotations
 
 from light_router.models.forecast import ForecastCycle
-from light_router.models.route import Route, RouterConfig, mean_vmg, route_bearing
+from light_router.models.route import (
+    Route,
+    RouterConfig,
+    Waypoint,
+    mean_vmg,
+    route_bearing,
+)
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import route_grid_box
 
@@ -18,6 +24,7 @@ __all__ = [
     "PolarTable",
     "Route",
     "RouterConfig",
+    "Waypoint",
     "mean_vmg",
     "route_bearing",
     "route_grid_box",
