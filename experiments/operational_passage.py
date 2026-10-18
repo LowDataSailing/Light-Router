@@ -198,6 +198,14 @@ def main() -> int:
         "in stronger wind are unsailable, so the plan dodges them; None "
         "(default) keeps the Level 1 behavior - no upper limit",
     )
+    parser.add_argument(
+        "--price-per-kb",
+        type=float,
+        default=None,
+        help="satellite price per KB (EUR) for the passage cost column and "
+        "summary; omitted when not given (Decision #21: delivered package "
+        "bytes only)",
+    )
     parser.add_argument("--workers", type=int, default=8, help="parallel downloads")
     parser.add_argument(
         "--pack",
@@ -269,6 +277,7 @@ def main() -> int:
         max_hours=120.0,  # each cycle's forecast horizon
         max_tws_kt=args.max_tws_kt,
     )
+    polar = synthetic_cruising_polar()
     results = run_operational_staircase(
         truth,
         cycles,
@@ -282,7 +291,7 @@ def main() -> int:
         max_hours=args.max_passage_hours,
     )
 
-    print(format_operational_summary(results))
+    print(format_operational_summary(results, price_per_kb=args.price_per_kb))
 
     if args.artifacts:
         run_dir = new_run_dir(RUNS, scenario=args.scenario)
@@ -303,6 +312,10 @@ def main() -> int:
                 "cycle_hours": 6,
                 **({"pack": args.pack} if args.pack else {}),
             },
+            router="isochrone-surrogate",
+            polar=polar,
+            polar_source="synthetic_cruising_polar",
+            price_per_kb=args.price_per_kb,
         )
         print(f"\nartifacts written to {run_dir}")
     return 0

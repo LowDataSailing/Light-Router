@@ -20,6 +20,8 @@ the unlimited-data reference is the reward.
 
 from __future__ import annotations
 
+import hashlib
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -34,7 +36,7 @@ from experiments.harness.degrade import (
 from experiments.harness.staircase import budget_label
 from experiments.models.passage import CycleRecord, PassageResult
 from light_router.models.forecast import ForecastCycle
-from light_router.models.route import Route
+from light_router.models.route import Route, route_bearing
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import WeatherGrid
 from light_router.routing import Router
@@ -52,6 +54,7 @@ class _PassageState:
     plan: Route | None
     plan_init: float
     cycle_idx: int
+    ledger_bytes: int
     track_lat: list[float]
     track_lon: list[float]
     track_time: list[float]
@@ -132,6 +135,7 @@ def simulate_passage(
         plan=None,
         plan_init=0.0,
         cycle_idx=0,
+        ledger_bytes=0,
         track_lat=[start[0]],
         track_lon=[start[1]],
         track_time=[0.0],
@@ -148,13 +152,21 @@ def simulate_passage(
         > finish_radius_nm
         and state.t < max_hours
     ):
-        _replan_due_cycles(state, cycles, budget_bytes, router, compression, finish)
+        _replan_due_cycles(
+            state, cycles, budget_bytes, router, compression, finish, truth_grid
+        )
         _advance_step(state, truth_grid, polar, dt_hours)
 
     reached = bool(
         great_circle_distance(state.lat, state.lon, finish[0], finish[1])
         <= finish_radius_nm
     )
+    # belief error (issue #15): what each cycle believed about arrival vs the
+    # actual arrival — nearly free, both sides already exist.
+    if reached:
+        for record in state.records:
+            if record.planned_arrival_hour is not None:
+                record.belief_error_h = record.planned_arrival_hour - state.t
     # waypoint 0 is the start (no leg yet): pad the per-leg arrays with NaN,
     # matching the Route convention.
     pad = np.array([np.nan])
@@ -181,46 +193,109 @@ def _replan_due_cycles(
     router: Router,
     compression: CompressionMethod,
     finish: tuple[float, float],
+    truth_grid: WeatherGrid,
 ) -> None:
     """Planning cycle: consume every due forecast run (latest wins), compress
-    the newest to the budget, and replan from the boat's current position."""
+    the newest to the budget, and replan from the boat's current position.
+
+    Records the decision log (issue #15), the forecast error and staleness
+    (issue #17), the bandwidth ledger (issue #14) and the replan compute
+    time (issue #19) on each :class:`CycleRecord`.
+    """
     while (
         state.cycle_idx < len(cycles) and cycles[state.cycle_idx].init_hour <= state.t
     ):
         cycle = cycles[state.cycle_idx]
         grid = grid_from_dataset(cycle.weather)
         package = compression(grid, budget_bytes)
+        record = CycleRecord(
+            hour=state.t,
+            config=package.config if package is not None else None,
+            package_bytes=package.package_bytes if package is not None else 0,
+            plan_reached=False,
+            planned_arrival_hour=None,
+        )
         if package is not None:
-            state.plan = router.for_weather(to_cf_dataset(package.grid)).route(
+            started = time.perf_counter()
+            plan = router.for_weather(to_cf_dataset(package.grid)).route(
                 (state.lat, state.lon), finish, start_time=state.t - cycle.init_hour
             )
+            record.compute_seconds = time.perf_counter() - started
+
+            # decision log (issue #15): what the router decided, not just
+            # received — bearing, plan identity, churn, execution error.
+            record.planned_bearing_deg = (
+                route_bearing(plan) if plan.n_waypoints > 1 else None
+            )
+            record.plan_checksum = _plan_checksum(plan)
+            if state.plan is not None:
+                record.churn_nm = _plan_divergence_nm(
+                    state.plan, state.plan_init, plan, cycle.init_hour
+                )
+                pred_lat, pred_lon = _plan_position_at(
+                    state.plan, state.t - state.plan_init
+                )
+                record.execution_error_nm = float(
+                    great_circle_distance(state.lat, state.lon, pred_lat, pred_lon)
+                )
+
+            # forecast-vs-truth error at the boat (issue #17): what the
+            # router believed (degraded forecast) against what is true.
+            fc_speed, _ = package.grid.wind(
+                np.asarray(state.t - cycle.init_hour),
+                np.asarray(state.lat),
+                np.asarray(state.lon),
+            )
+            truth_speed, _ = truth_grid.wind(
+                np.asarray(state.t),
+                np.asarray(state.lat),
+                np.asarray(state.lon),
+            )
+            record.forecast_error_kt = abs(float(fc_speed) - float(truth_speed))
+            record.forecast_staleness_h = state.t - cycle.init_hour
+
+            record.plan_reached = plan.reached
+            record.planned_arrival_hour = (
+                cycle.init_hour + plan.eta_hours if plan.reached else None
+            )
+            state.plan = plan
             state.plan_init = cycle.init_hour
-            state.records.append(
-                CycleRecord(
-                    hour=state.t,
-                    config=package.config,
-                    package_bytes=package.package_bytes,
-                    plan_reached=state.plan.reached,
-                    planned_arrival_hour=(
-                        cycle.init_hour + state.plan.eta_hours
-                        if state.plan.reached
-                        else None
-                    ),
-                )
-            )
-        else:
-            # budget unreachable even fully degraded: no data this
-            # cycle, the boat keeps following the previous plan
-            state.records.append(
-                CycleRecord(
-                    hour=state.t,
-                    config=None,
-                    package_bytes=0,
-                    plan_reached=False,
-                    planned_arrival_hour=None,
-                )
-            )
+        # budget unreachable even fully degraded: no data this cycle, the
+        # boat keeps following the previous plan (record already says so)
+        # bandwidth ledger (issue #14): cumulative delivered bytes by cycle.
+        state.ledger_bytes += record.package_bytes
+        record.cumulative_bytes = state.ledger_bytes
+        state.records.append(record)
         state.cycle_idx += 1
+
+
+def _plan_checksum(plan: Route) -> str:
+    """Short SHA-256 over the planned track — plan identity (issue #15)."""
+    h = hashlib.sha256()
+    for arr in (plan.lat, plan.lon, plan.time):
+        h.update(np.ascontiguousarray(arr, dtype=float).tobytes())
+    return h.hexdigest()[:16]
+
+
+def _plan_divergence_nm(
+    prev: Route, prev_init: float, new: Route, new_init: float
+) -> float | None:
+    """Mean distance (nm) between two plans over their overlapping absolute
+    time window — plan-to-plan churn (issue #15).
+
+    Plan time axes are lead hours since their own run's initialization;
+    absolute time = lead + init. Returns None when the plans do not overlap.
+    """
+    t0 = max(float(new.time[0]) + new_init, float(prev.time[0]) + prev_init)
+    t1 = min(float(new.time[-1]) + new_init, float(prev.time[-1]) + prev_init)
+    if t1 <= t0:
+        return None
+    samples = np.linspace(t0, t1, 32)
+    prev_lat = np.interp(samples - prev_init, prev.time, prev.lat)
+    prev_lon = np.interp(samples - prev_init, prev.time, prev.lon)
+    new_lat = np.interp(samples - new_init, new.time, new.lat)
+    new_lon = np.interp(samples - new_init, new.time, new.lon)
+    return float(np.mean(great_circle_distance(prev_lat, prev_lon, new_lat, new_lon)))
 
 
 def _advance_step(
@@ -302,21 +377,34 @@ def _plan_position_at(plan: Route, lead_time: float) -> tuple[float, float]:
     return lat, lon
 
 
-def format_operational_summary(results: list[PassageResult]) -> str:
-    """Human-readable operational table: budget vs actual passage."""
+def format_operational_summary(
+    results: list[PassageResult], price_per_kb: float | None = None
+) -> str:
+    """Human-readable operational table: budget vs actual passage.
+
+    ``price_per_kb`` (EUR/KB, issue #14) adds the bandwidth-price column —
+    the cost of each passage's delivered bytes (Decision #21: delivered
+    package bytes only).
+    """
     reference = next((r for r in results if r.budget_bytes is None), results[0])
+    cost_head = f"{'cost EUR':>9} " if price_per_kb is not None else ""
     lines = [
-        f"{'budget':>10} {'pkg/cycle':>9} {'total KB':>9} {'cycles':>7} "
-        f"{'passage h':>10} {'vs unlimited':>12} {'reached':>8}"
+        f"{'budget':>10} {'pkg/cycle':>9} {'total KB':>9} {cost_head}"
+        f"{'cycles':>7} {'passage h':>10} {'vs unlimited':>12} "
+        f"{'max wind kt':>11} {'compute s':>9} {'reached':>8}"
     ]
     for result in results:
         label = budget_label(result.budget_bytes)
         per_cycle = result.total_package_bytes // max(len(result.cycles), 1)
         total_kb = result.total_package_bytes / 1000
         diff = result.passage_hours - reference.passage_hours
+        cost_cell = (
+            f"{total_kb * price_per_kb:>9.2f} " if price_per_kb is not None else ""
+        )
         lines.append(
-            f"{label:>10} {per_cycle:>9} {total_kb:>9.1f} "
+            f"{label:>10} {per_cycle:>9} {total_kb:>9.1f} {cost_cell}"
             f"{len(result.cycles):>7} {result.passage_hours:>10.1f} "
-            f"{diff:>+11.1f}h {str(result.reached):>8}"
+            f"{diff:>+11.1f}h {result.max_tws_kt:>11.1f} "
+            f"{result.compute_seconds_mean:>9.2f} {str(result.reached):>8}"
         )
     return "\n".join(lines)

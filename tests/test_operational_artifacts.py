@@ -86,6 +86,10 @@ def run_dir(results, tmp_path_factory):
         budgets=BUDGETS,
         source={"type": "operational", "truth": "synthetic"},
         plots=False,  # plots covered below with matplotlib present
+        router="isochrone-surrogate",
+        polar=synthetic_cruising_polar(),
+        polar_source="synthetic_cruising_polar",
+        price_per_kb=0.01,
     )
     return run_dir
 
@@ -122,21 +126,44 @@ def test_operational_run_dir_contents(run_dir):
 def test_passage_csv_rows(run_dir, results):
     _, passage_results = results
     lines = (run_dir / PASSAGE_NAME).read_text().splitlines()
-    assert (
-        lines[0]
-        == "budget,total_package_bytes,cycles,passage_hours,distance_nm,reached"
+    assert lines[0] == (
+        "budget,total_package_bytes,cost_eur,cycles,passage_hours,distance_nm,"
+        "max_tws_kt,mean_tws_kt,pct_upwind,pct_downwind,"
+        "compute_total_s,compute_mean_s,reached"
     )
     assert len(lines) == len(passage_results) + 1
     assert lines[1].startswith("unlimited,")
+    # cost model (issue #14): delivered bytes priced at 0.01 EUR/KB
+    row = lines[1].split(",")
+    assert row[2] == f"{passage_results[0].total_package_bytes / 1000 * 0.01:.2f}"
+    # experienced weather (issue #18) and compute time (issue #19) present
+    assert 0.0 < float(row[6]) <= 40.0  # max_tws_kt
+    assert 0.0 <= float(row[8]) <= 100.0  # pct_upwind
+    assert float(row[10]) >= 0.0  # compute_total_s
 
 
 def test_cycles_csv_rows(run_dir, results):
     _, passage_results = results
     lines = (run_dir / CYCLES_NAME).read_text().splitlines()
-    assert lines[0].startswith("budget,hour,spatial_stride")
+    assert lines[0] == (
+        "budget,hour,spatial_stride,temporal_stride,bits,"
+        "package_bytes,cumulative_bytes,plan_reached,planned_arrival_hour,"
+        "planned_bearing_deg,plan_checksum,churn_nm,execution_error_nm,"
+        "belief_error_h,forecast_error_kt,forecast_staleness_h,compute_s"
+    )
     n_cycles = sum(len(r.cycles) for r in passage_results)
     assert len(lines) == n_cycles + 1
     assert "unlimited,0.0," in lines[1]
+    # bandwidth ledger (issue #14): cumulative bytes never decrease per budget
+    for result in passage_results:
+        rows = [
+            ln.split(",")
+            for ln in lines[1:]
+            if ln.startswith(budget_label(result.budget_bytes) + ",")
+        ]
+        cumulative = [int(r[6]) for r in rows]
+        assert cumulative == sorted(cumulative)
+        assert cumulative[-1] == result.total_package_bytes
 
 
 def test_operational_manifest(run_dir):
@@ -144,6 +171,10 @@ def test_operational_manifest(run_dir):
     assert manifest["scenario"] == "operational_test"
     assert manifest["staircase"] == BUDGETS
     assert manifest["source"]["truth"] == "synthetic"
+    # routing-model identity (issue #16): algorithm + polar provenance
+    assert manifest["router"]["algorithm"] == "isochrone-surrogate"
+    assert manifest["polar"]["source"] == "synthetic_cruising_polar"
+    assert manifest["polar"]["checksum"] == synthetic_cruising_polar().checksum
 
 
 def test_operational_plots(tmp_path, results):

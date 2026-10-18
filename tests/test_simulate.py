@@ -161,3 +161,96 @@ def test_no_cycles_raises():
             make_router(weather),
             synthetic_cruising_polar(),
         )
+
+
+# --- issues #14/#15/#17/#18/#19: ledger, decision log, monitoring ------------
+
+
+def run_passage(wind_kt=15.0, truth_wind_kt=None, **kwargs):
+    weather = make_weather(wind_kt=wind_kt)
+    truth = make_weather(wind_kt=truth_wind_kt) if truth_wind_kt else weather
+    kwargs.setdefault("max_hours", 60.0)
+    return simulate_passage(
+        truth,
+        make_cycles(weather),
+        START,
+        FINISH,
+        make_router(weather),
+        synthetic_cruising_polar(),
+        **kwargs,
+    )
+
+
+def test_cycle_records_carry_the_decision_log():
+    result = run_passage()
+    records = result.cycles
+    assert len(records) >= 2
+    first, later = records[0], records[1]
+    # helm decision + plan identity (issue #15)
+    assert first.planned_bearing_deg is not None
+    assert 0.0 <= first.planned_bearing_deg < 360.0
+    assert len(first.plan_checksum) == 16
+    # first plan has no churn / execution error; later plans do
+    assert first.churn_nm is None and first.execution_error_nm is None
+    assert later.churn_nm is not None and later.churn_nm >= 0.0
+    assert later.execution_error_nm is not None and later.execution_error_nm >= 0.0
+    # belief error (issue #15): filled for reached plans, small on a
+    # perfect forecast
+    assert all(r.belief_error_h is not None for r in records)
+    assert all(abs(r.belief_error_h) < 10.0 for r in records)
+    # forecast error (issue #17): recorded every data cycle. On this
+    # fixture each cycle replays the passage-start field, so the error is
+    # the temporal modulation gap — small but nonzero, and staleness is 0
+    # (runs are consumed exactly at their init time).
+    assert all(r.forecast_error_kt is not None for r in records)
+    assert all(0.0 <= r.forecast_error_kt < 5.0 for r in records)
+    assert all(r.forecast_staleness_h == 0.0 for r in records)
+    # compute time (issue #19) recorded, non-negative
+    assert all(
+        r.compute_seconds is not None and r.compute_seconds >= 0.0 for r in records
+    )
+
+
+def test_bandwidth_ledger_accumulates():
+    result = run_passage(budget_bytes=3000)
+    cumulative = [r.cumulative_bytes for r in result.cycles]
+    assert cumulative == sorted(cumulative)
+    assert cumulative[-1] == result.total_package_bytes
+    assert all(r.package_bytes <= 3000 for r in result.cycles)
+
+
+def test_forecast_error_exposed_on_a_bad_forecast():
+    # the router believes 15 kt trades; the truth is calm (issue #17)
+    result = run_passage(wind_kt=15.0, truth_wind_kt=0.05, max_hours=24.0)
+    assert all(r.forecast_error_kt > 10.0 for r in result.cycles)
+
+
+def test_experienced_weather_properties():
+    result = run_passage()
+    assert 10.0 <= result.max_tws_kt <= 20.0  # 15 kt trades +- 15%
+    assert 10.0 <= result.mean_tws_kt <= 20.0
+    assert 0.0 <= result.upwind_fraction <= 1.0
+    assert 0.0 <= result.downwind_fraction <= 1.0
+    assert result.upwind_fraction + result.downwind_fraction <= 1.0
+    assert result.compute_seconds_total >= 0.0
+    assert result.compute_seconds_mean >= 0.0
+
+
+def test_summary_reports_cost_and_weather():
+    weather = make_weather()
+    results = run_operational_staircase(
+        weather,
+        make_cycles(weather),
+        START,
+        FINISH,
+        make_router(weather),
+        synthetic_cruising_polar(),
+        [None, 3000],
+        max_hours=60.0,
+    )
+    summary = format_operational_summary(results, price_per_kb=0.01)
+    assert "cost EUR" in summary
+    assert "max wind kt" in summary
+    assert "compute s" in summary
+    plain = format_operational_summary(results)
+    assert "cost EUR" not in plain

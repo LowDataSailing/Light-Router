@@ -85,6 +85,10 @@ class IsochroneRouter(BaseRouter):
     """Algorithm identity for run manifests — not the oracle
     (Decision #15); validated against it before results depend on it."""
 
+    name = "isochrone-surrogate"
+    """Algorithm identity for run manifests (issue #16) — not the oracle
+    (Decision #15); validated against it before results depend on it."""
+
     @classmethod
     def from_dataset(
         cls,
