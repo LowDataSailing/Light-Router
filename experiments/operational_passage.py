@@ -190,6 +190,14 @@ def main() -> int:
         "quota (~10k weighted calls) on long routes",
     )
     parser.add_argument("--budgets", default=DEFAULT_BUDGETS)
+    parser.add_argument(
+        "--max-tws-kt",
+        type=float,
+        default=None,
+        help="planning wind limit (kt): candidates the router would place "
+        "in stronger wind are unsailable, so the plan dodges them; None "
+        "(default) keeps the Level 1 behavior - no upper limit",
+    )
     parser.add_argument("--workers", type=int, default=8, help="parallel downloads")
     parser.add_argument(
         "--pack",
@@ -259,6 +267,7 @@ def main() -> int:
         max_points=1200,
         finish_radius_nm=25.0,
         max_hours=120.0,  # each cycle's forecast horizon
+        max_tws_kt=args.max_tws_kt,
     )
     results = run_operational_staircase(
         truth,
