@@ -6,7 +6,7 @@ from light_router.routing import (
     route_bearing,
 )
 from experiments.synthetic_polar import synthetic_cruising_polar
-from experiments.synthetic import trade_wind_field
+from experiments.synthetic import add_storm, trade_wind_field
 
 
 def make_router(wind_from_deg=60.0, dt=2.0, max_hours=200.0):
@@ -85,3 +85,58 @@ def test_route_bearing_and_vmg():
     assert not np.isnan(bearing)
     vmg = mean_vmg(route, FINISH)
     assert 0.0 < vmg <= 8.0  # positive progress, below hull speed
+
+
+# --- Decision #20: planning wind limit ---------------------------------------
+
+
+def make_storm_router(max_tws_kt=None, max_hours=200.0):
+    """Trade-wind field with the default storm parked on the direct route."""
+    lats = np.arange(10.0, 32.01, 0.5)
+    lons = np.arange(-28.0, -12.99, 0.5)
+    times = np.arange(0.0, max_hours + 1.0, 6.0)
+    grid = add_storm(
+        trade_wind_field(lats, lons, times, mean_speed_kt=15.0, direction_from_deg=60.0)
+    )
+    return IsochroneRouter(
+        grid=grid,
+        polar=synthetic_cruising_polar(),
+        dt_hours=2.0,
+        n_headings=24,
+        bin_deg=1.0,
+        max_points=600,
+        finish_radius_nm=30.0,
+        max_hours=max_hours,
+        max_tws_kt=max_tws_kt,
+    )
+
+
+def test_wind_limit_keeps_route_under_the_limit():
+    from light_router.sampling import wind_along_route
+
+    router = make_storm_router(max_tws_kt=25.0)
+    route = router.route(START, FINISH)
+    assert route.reached
+    # no planned waypoint sits in wind above the limit (waypoint 0 is NaN-padded)
+    tws, _ = wind_along_route(router.grid, route)
+    assert np.nanmax(tws) <= 25.0 + 1e-6
+
+
+def test_wind_limit_off_by_default():
+    router = make_storm_router()
+    route = router.route(START, FINISH)
+    assert route.reached
+    assert router.max_tws_kt is None
+    assert router.config_as_dict()["max_tws_kt"] is None
+
+
+def test_wind_limit_config_serializes():
+    router = make_storm_router(max_tws_kt=25.0)
+    assert router.config_as_dict()["max_tws_kt"] == 25.0
+
+
+def test_wind_limit_below_traps_the_boat():
+    # a limit under the trade-wind speed leaves nothing sailable
+    router = make_storm_router(max_tws_kt=5.0)
+    route = router.route(START, FINISH)
+    assert not route.reached

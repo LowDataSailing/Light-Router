@@ -12,8 +12,8 @@ to rebind itself (Decision #22).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import replace
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field, replace
+from typing import ClassVar, Protocol, runtime_checkable
 
 import xarray as xr
 
@@ -46,6 +46,7 @@ class Router(Protocol):
     ) -> Route: ...
 
 
+@dataclass
 class BaseRouter(ABC):
     """Nominal base class for routers we own.
 
@@ -58,7 +59,15 @@ class BaseRouter(ABC):
     construction; the protocol check stays the harness's only assumption.
     """
 
-    name: str
+    max_tws_kt: float | None = field(default=None, kw_only=True)
+    """Planning wind limit (kt): candidates in winds above it are
+    unsailable (Decision #20). Optional and protocol-level: ``None``
+    (the default) keeps the Level 1 behavior — no upper limit — so a
+    router that cannot plan around wind simply leaves it unset. Readers
+    facing an arbitrary :class:`Router` must treat a missing attribute
+    as ``None``."""
+
+    name: ClassVar[str]
     """Algorithm identity for run manifests — the class name by default;
     subclasses override with their published identity (e.g.
     ``"isochrone-surrogate"``)."""
@@ -79,7 +88,7 @@ class BaseRouter(ABC):
         """
         from light_router.dataset import grid_from_dataset
 
-        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type]
+        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type,call-arg]
 
     @abstractmethod
     def route(

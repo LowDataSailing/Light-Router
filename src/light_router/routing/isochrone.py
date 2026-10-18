@@ -104,7 +104,7 @@ class IsochroneRouter(BaseRouter):
 
         return cls(grid=grid_from_dataset(weather), polar=polar, **kwargs)
 
-    def config_as_dict(self) -> dict[str, float | int]:
+    def config_as_dict(self) -> dict[str, float | int | None]:
         """Plain-dict form of the tuning attributes, for manifests.
 
         Every tuning field is included, so a manifest fully determines the
@@ -118,6 +118,7 @@ class IsochroneRouter(BaseRouter):
             "finish_radius_nm": self.finish_radius_nm,
             "max_hours": self.max_hours,
             "min_speed_kt": self.min_speed_kt,
+            "max_tws_kt": self.max_tws_kt,
         }
 
     def route(
@@ -210,6 +211,10 @@ class IsochroneRouter(BaseRouter):
         )
         dist = speed * self.dt_hours
         sail = speed > self.min_speed_kt
+        if self.max_tws_kt is not None:
+            # Decision #20: hard planning wind limit — candidates that
+            # would sail in stronger wind are unsailable.
+            sail &= tws[:, None] <= self.max_tws_kt
 
         lat_c = np.repeat(current.lat[:, None], len(headings), axis=1)
         lon_c = np.repeat(current.lon[:, None], len(headings), axis=1)
