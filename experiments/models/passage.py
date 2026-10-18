@@ -98,6 +98,4 @@ class PassageResult:
                 for la, lo, ti in zip(self.lat, self.lon, self.time)
             ],
             reached=self.reached,
-            eta_hours=self.passage_hours if self.reached else float("nan"),
-            distance_nm=self.distance_nm,
         )

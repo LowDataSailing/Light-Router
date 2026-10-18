@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from light_router.dataset import to_cf_dataset
-from light_router.routing import IsochroneRouter, RouterConfig
+from light_router.routing import IsochroneRouter
 from experiments.harness.metrics import compare_routes
 from experiments.synthetic_polar import synthetic_cruising_polar
 from experiments.harness.staircase import (
@@ -19,7 +19,9 @@ FINISH = (16.75, -22.9)
 
 def make_router(weather):
     """One router setup; the staircase re-binds it per package."""
-    config = RouterConfig(
+    return IsochroneRouter.from_dataset(
+        weather,
+        synthetic_cruising_polar(),
         dt_hours=2.0,
         n_headings=24,
         bin_deg=1.0,
@@ -27,7 +29,6 @@ def make_router(weather):
         finish_radius_nm=30.0,
         max_hours=200.0,
     )
-    return IsochroneRouter.from_dataset(weather, synthetic_cruising_polar(), config)
 
 
 @pytest.fixture

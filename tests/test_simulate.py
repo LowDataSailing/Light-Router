@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from light_router.dataset import to_cf_dataset
-from light_router.routing import IsochroneRouter, RouterConfig
+from light_router.routing import IsochroneRouter
 from experiments.synthetic_polar import synthetic_cruising_polar
 from experiments.simulation.simulate import (
     ForecastCycle,
@@ -19,7 +19,7 @@ from experiments.synthetic import trade_wind_field
 START = (29.5, -13.5)
 FINISH = (26.5, -16.5)
 
-ROUTER_CONFIG = RouterConfig(
+ROUTER_KWARGS = dict(
     dt_hours=2.0,
     n_headings=18,
     bin_deg=1.0,
@@ -32,7 +32,7 @@ ROUTER_CONFIG = RouterConfig(
 def make_router(weather):
     """One router setup; the simulation re-binds it to every package."""
     return IsochroneRouter.from_dataset(
-        weather, synthetic_cruising_polar(), ROUTER_CONFIG
+        weather, synthetic_cruising_polar(), **ROUTER_KWARGS
     )
 
 

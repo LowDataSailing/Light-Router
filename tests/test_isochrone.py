@@ -2,7 +2,6 @@ import numpy as np
 
 from light_router.routing import (
     IsochroneRouter,
-    RouterConfig,
     mean_vmg,
     route_bearing,
 )
@@ -17,7 +16,9 @@ def make_router(wind_from_deg=60.0, dt=2.0, max_hours=200.0):
     grid = trade_wind_field(
         lats, lons, times, mean_speed_kt=15.0, direction_from_deg=wind_from_deg
     )
-    config = RouterConfig(
+    return IsochroneRouter(
+        grid=grid,
+        polar=synthetic_cruising_polar(),
         dt_hours=dt,
         n_headings=24,
         bin_deg=1.0,
@@ -25,7 +26,6 @@ def make_router(wind_from_deg=60.0, dt=2.0, max_hours=200.0):
         finish_radius_nm=30.0,
         max_hours=max_hours,
     )
-    return IsochroneRouter(grid=grid, polar=synthetic_cruising_polar(), config=config)
 
 
 START = (28.0, -15.5)

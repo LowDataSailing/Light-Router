@@ -11,7 +11,6 @@ from __future__ import annotations
 from light_router.models.forecast import ForecastCycle
 from light_router.models.route import (
     Route,
-    RouterConfig,
     Waypoint,
     mean_vmg,
     route_bearing,
@@ -23,7 +22,6 @@ __all__ = [
     "ForecastCycle",
     "PolarTable",
     "Route",
-    "RouterConfig",
     "Waypoint",
     "mean_vmg",
     "route_bearing",

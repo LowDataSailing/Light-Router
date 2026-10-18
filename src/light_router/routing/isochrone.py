@@ -15,13 +15,14 @@ the Baseline System spec.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import xarray as xr
 
 from light_router.geo import destination, great_circle_distance
-from light_router.models.route import Route, RouterConfig, Waypoint
+from light_router.models.route import Route, Waypoint
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import WeatherGrid
 from light_router.routing.protocol import BaseRouter
@@ -45,11 +46,40 @@ class IsochroneRouter(BaseRouter):
     (Decision #15). Not the oracle itself. Inherits ``BaseRouter`` so the
     contract is fixed nominally; future in-repo algorithms subclass
     ``BaseRouter`` the same way instead of re-deriving the interface.
+
+    The router's tuning lives in its own attributes below — every router
+    carries its config this way, so a router instance is its single,
+    complete setup.
     """
 
     grid: WeatherGrid
+    """Weather grid the router plans against."""
+
     polar: PolarTable
-    config: RouterConfig = field(default_factory=RouterConfig)
+    """Boat polar: speed as a function of wind speed and angle."""
+
+    dt_hours: float = 1.0
+    """Isochrone time step (h) — one expansion level per step."""
+
+    n_headings: int = 36  # every 10 degrees
+    """Candidate headings tried from each point, every level."""
+
+    bin_deg: float = 1.0
+    """Geographic pruning bin size (deg) — one survivor per bin."""
+
+    max_points: int = 1500
+    """Cap on candidate points per level, after pruning."""
+
+    finish_radius_nm: float = 25.0
+    """Arrival radius around the finish (nm)."""
+
+    max_hours: float = 240.0
+    """Planning horizon (h); a route that cannot finish within it is
+    returned as partial (``reached`` is False)."""
+
+    min_speed_kt: float = 0.1
+    """Candidates the polar cannot sail faster than are dropped
+    (dead calm / head wind)."""
 
     name = "isochrone-surrogate"
     """Algorithm identity for run manifests — not the oracle
@@ -60,16 +90,35 @@ class IsochroneRouter(BaseRouter):
         cls,
         weather: xr.Dataset,
         polar: PolarTable,
-        config: RouterConfig | None = None,
+        **kwargs: Any,
     ) -> IsochroneRouter:
-        """Build the router from the canonical CF weather Dataset."""
+        """Build the router from the canonical CF weather Dataset.
+
+        Args:
+            weather: Weather as the canonical CF Dataset.
+            polar: Boat polar table.
+            **kwargs: Tuning overrides for the router's own config
+                attributes (``dt_hours``, ``n_headings``, ...).
+        """
         from light_router.dataset import grid_from_dataset
 
-        return cls(
-            grid=grid_from_dataset(weather),
-            polar=polar,
-            config=config if config is not None else RouterConfig(),
-        )
+        return cls(grid=grid_from_dataset(weather), polar=polar, **kwargs)
+
+    def config_as_dict(self) -> dict[str, float | int]:
+        """Plain-dict form of the tuning attributes, for manifests.
+
+        Every tuning field is included, so a manifest fully determines the
+        router configuration.
+        """
+        return {
+            "dt_hours": self.dt_hours,
+            "n_headings": self.n_headings,
+            "bin_deg": self.bin_deg,
+            "max_points": self.max_points,
+            "finish_radius_nm": self.finish_radius_nm,
+            "max_hours": self.max_hours,
+            "min_speed_kt": self.min_speed_kt,
+        }
 
     def route(
         self,
@@ -83,12 +132,11 @@ class IsochroneRouter(BaseRouter):
         radius, or the partial route to the closest reached point if the
         time horizon is exhausted (Route.reached is False).
         """
-        cfg = self.config
-        headings = np.arange(cfg.n_headings, dtype=float) * (360.0 / cfg.n_headings)
+        headings = np.arange(self.n_headings, dtype=float) * (360.0 / self.n_headings)
 
         if (
             float(great_circle_distance(start[0], start[1], finish[0], finish[1]))
-            <= cfg.finish_radius_nm
+            <= self.finish_radius_nm
         ):
             return self._empty_route(start, start_time)
 
@@ -99,8 +147,8 @@ class IsochroneRouter(BaseRouter):
             parent=np.array([-1]),
         )
         t = start_time
-        while t - start_time <= cfg.max_hours:
-            t_next = t + cfg.dt_hours
+        while t - start_time <= self.max_hours:
+            t_next = t + self.dt_hours
 
             candidates = self._expand(current, headings, t)
             if candidates.lat.size == 0:
@@ -123,7 +171,7 @@ class IsochroneRouter(BaseRouter):
                     reached=True,
                 )
 
-            kept = self._prune(candidates.lat, candidates.lon, remaining, cfg)
+            kept = self._prune(candidates.lat, candidates.lon, remaining)
             # Store the pruned level: candidate parents of the next level index
             # into this pruned array.
             levels.append(
@@ -150,7 +198,6 @@ class IsochroneRouter(BaseRouter):
         its heading, and returns the flat candidate arrays with parent
         indices into ``current``.
         """
-        cfg = self.config
         tws, wdir = self.grid.wind(
             np.full(len(current.lat), t), current.lat, current.lon
         )
@@ -161,8 +208,8 @@ class IsochroneRouter(BaseRouter):
         speed = np.asarray(
             self.polar.boat_speed(np.repeat(tws[:, None], len(headings), axis=1), twa)
         )
-        dist = speed * cfg.dt_hours
-        sail = speed > cfg.min_speed_kt
+        dist = speed * self.dt_hours
+        sail = speed > self.min_speed_kt
 
         lat_c = np.repeat(current.lat[:, None], len(headings), axis=1)
         lon_c = np.repeat(current.lon[:, None], len(headings), axis=1)
@@ -180,24 +227,24 @@ class IsochroneRouter(BaseRouter):
         finish radius — checking the closest is sufficient: if it is not
         inside, nothing is."""
         idx = int(np.argmin(remaining))
-        if remaining[idx] <= self.config.finish_radius_nm:
+        if remaining[idx] <= self.finish_radius_nm:
             return idx
         return None
 
     def _prune(
-        self, lat: np.ndarray, lon: np.ndarray, remaining: np.ndarray, cfg: RouterConfig
+        self, lat: np.ndarray, lon: np.ndarray, remaining: np.ndarray
     ) -> np.ndarray:
         """Keep the best-progressing candidate per geographic bin."""
-        bin_lat = np.floor(lat / cfg.bin_deg).astype(np.int64)
-        bin_lon = np.floor(lon / cfg.bin_deg).astype(np.int64)
+        bin_lat = np.floor(lat / self.bin_deg).astype(np.int64)
+        bin_lon = np.floor(lon / self.bin_deg).astype(np.int64)
         key = bin_lat * 100000 + bin_lon
         order = np.lexsort((remaining, key))  # sort by key, then remaining
         key_sorted = key[order]
         first = np.ones(len(order), dtype=bool)
         first[1:] = key_sorted[1:] != key_sorted[:-1]
         kept = order[first]
-        if len(kept) > cfg.max_points:
-            kept = kept[np.argsort(remaining[kept])[: cfg.max_points]]
+        if len(kept) > self.max_points:
+            kept = kept[np.argsort(remaining[kept])[: self.max_points]]
         return kept
 
     def _closest_point(
@@ -223,7 +270,26 @@ class IsochroneRouter(BaseRouter):
         start_time: float,
         reached: bool,
     ) -> Route:
-        """Rebuild the route ending at ``levels[level_no][point_idx]``."""
+        """Rebuild the route ending at ``levels[level_no][point_idx]``.
+
+        The expansion only ever moves forward: each level stores its
+        candidate points plus, for each, the index of the *parent* point
+        in the previous level it was reached from. So the route is not
+        known during the expansion — only the best endpoint is. This
+        walks the parent chain backwards from that endpoint:
+
+        1. take the arrival (or closest) point at ``levels[level_no]``;
+        2. jump to its parent in the previous level, and to that point's
+           parent, and so on — each hop is one isochrone time step back;
+        3. the chain ends at the start (parent index -1), which is
+           prepended;
+        4. the collected points are reversed into sailing order, and each
+           gets its time: start time plus one ``dt_hours`` per level.
+
+        The result is the optimal path through the pruned tree — the
+        points that survived pruning because they were the best
+        progress-makers in their geographic bin at their time.
+        """
         lats, lons = [], []
         idx = point_idx
         for level in reversed(levels[: level_no + 1]):
@@ -236,20 +302,13 @@ class IsochroneRouter(BaseRouter):
         lat = np.array(lats[::-1], dtype=float)
         lon = np.array(lons[::-1], dtype=float)
         n = len(lat)
-        time = start_time + np.arange(n) * self.config.dt_hours
-        distance = float(
-            np.sum(great_circle_distance(lat[:-1], lon[:-1], lat[1:], lon[1:]))
-        )
-        eta = float(time[-1]) if reached else float("nan")
-        waypoints = [
-            Waypoint(lat=float(la), lon=float(lo), time=float(ti))
-            for la, lo, ti in zip(lat, lon, time)
-        ]
+        time = start_time + np.arange(n) * self.dt_hours
         return Route(
-            waypoints=waypoints,
+            waypoints=[
+                Waypoint(lat=float(la), lon=float(lo), time=float(ti))
+                for la, lo, ti in zip(lat, lon, time)
+            ],
             reached=reached,
-            eta_hours=eta,
-            distance_nm=distance,
         )
 
     def _empty_route(self, start: tuple[float, float], start_time: float) -> Route:
@@ -257,6 +316,4 @@ class IsochroneRouter(BaseRouter):
         return Route(
             waypoints=[Waypoint(start[0], start[1], start_time)],
             reached=True,
-            eta_hours=start_time,
-            distance_nm=0.0,
         )

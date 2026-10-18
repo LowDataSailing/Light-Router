@@ -36,8 +36,6 @@ def make_route() -> Route:
             Waypoint(lat=26.0, lon=-15.5, time=8.0),
         ],
         reached=True,
-        eta_hours=8.0,
-        distance_nm=120.0,
     )
 
 
@@ -61,10 +59,22 @@ def test_derived_leg_properties():
     # speed over ground of the arriving leg; NaN at the start waypoint
     assert np.isnan(route.speed[0])
     assert route.speed[1] == pytest.approx(15.0, rel=0.01)  # 60 nm / 4 h
+    # eta and distance derive from the waypoint geometry, not stored fields
+    assert route.eta_hours == 8.0  # final waypoint time
+    assert route.distance_nm == pytest.approx(120.0, rel=0.01)  # 2 x 60 nm legs
+
+
+def test_unreached_route_eta_is_nan_distance_is_partial():
+    route = Route(
+        waypoints=[Waypoint(lat=28.0, lon=-15.5, time=0.0)],
+        reached=False,
+    )
+    assert np.isnan(route.eta_hours)
+    assert route.distance_nm == 0.0  # no legs: nothing sailed
 
 
 def test_empty_route_derived_properties():
-    route = Route(waypoints=[], reached=False, eta_hours=float("nan"), distance_nm=0.0)
+    route = Route(waypoints=[], reached=False)
     assert route.n_waypoints == 0
     assert route.heading.size == 0
     assert route.speed.size == 0
@@ -106,7 +116,7 @@ def test_for_weather_rebinds_and_satisfies_protocol():
     assert isinstance(rebound, Router)
     assert rebound is not router
     assert rebound.polar is router.polar  # setup carried over
-    assert rebound.config is router.config
+    assert rebound.config_as_dict() == router.config_as_dict()
 
 
 def test_base_router_name_defaults_to_class_name():

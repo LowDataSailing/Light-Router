@@ -21,7 +21,7 @@ import xarray as xr
 from light_router.dataset import dataset_extent, grid_from_dataset
 from experiments.harness.staircase import StaircaseResult, budget_label, write_csv
 from experiments.models.passage import PassageResult
-from light_router.models.route import Route, RouterConfig
+from light_router.models.route import Route
 from light_router.provenance import git_sha
 
 MANIFEST_NAME = "manifest.json"
@@ -64,7 +64,7 @@ def write_manifest(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     staircase: list[int | None],
     weather: xr.Dataset,
     source: dict[str, object],
@@ -87,7 +87,7 @@ def write_manifest(
             "extent_east_west_south_north": list(dataset_extent(weather)),
         },
         "route": {"start": list(start), "finish": list(finish)},
-        "router_config": router_config.as_dict(),
+        "router_config": router_config,
         "staircase": staircase,
     }
     path = run_dir / MANIFEST_NAME
@@ -124,7 +124,7 @@ def write_artifacts(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     staircase: list[int | None],
     source: dict[str, object],
     routes: dict[str, Route] | None = None,
@@ -208,7 +208,7 @@ def write_operational_artifacts(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     budgets: list[int | None],
     source: dict[str, object],
     plots: bool = True,

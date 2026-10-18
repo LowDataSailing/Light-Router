@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from light_router.dataset import to_cf_dataset
-from light_router.routing import IsochroneRouter, Router, RouterConfig
+from light_router.routing import IsochroneRouter, Router
 from experiments.synthetic_polar import synthetic_cruising_polar
 from experiments.simulation.scenario import Scenario
 from experiments.harness.staircase import STAIRCASE
@@ -41,14 +41,12 @@ def test_scenario_runs_staircase():
     router = IsochroneRouter.from_dataset(
         scenario.weather,
         synthetic_cruising_polar(),
-        RouterConfig(
-            dt_hours=4.0,
-            n_headings=18,
-            bin_deg=2.0,
-            max_points=400,
-            finish_radius_nm=40.0,
-            max_hours=250.0,
-        ),
+        dt_hours=4.0,
+        n_headings=18,
+        bin_deg=2.0,
+        max_points=400,
+        finish_radius_nm=40.0,
+        max_hours=250.0,
     )
     result = scenario.run(router)
     assert result.reference.reached
@@ -65,14 +63,12 @@ def test_scenario_custom_staircase():
     router = IsochroneRouter.from_dataset(
         scenario.weather,
         synthetic_cruising_polar(),
-        RouterConfig(
-            dt_hours=4.0,
-            n_headings=18,
-            bin_deg=2.0,
-            max_points=400,
-            finish_radius_nm=40.0,
-            max_hours=250.0,
-        ),
+        dt_hours=4.0,
+        n_headings=18,
+        bin_deg=2.0,
+        max_points=400,
+        finish_radius_nm=40.0,
+        max_hours=250.0,
     )
     result = scenario.run(router)
     assert len(result.rows) == 2

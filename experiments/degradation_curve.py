@@ -45,7 +45,7 @@ from light_router.weather_data.gfs import download_gfs_wind  # noqa: E402
 from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
 from light_router.dataset import dataset_extent, to_cf_dataset  # noqa: E402
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
-from light_router.routing import IsochroneRouter, RouterConfig  # noqa: E402
+from light_router.routing import IsochroneRouter  # noqa: E402
 from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
 from experiments.simulation.scenario import Scenario  # noqa: E402
 from experiments.harness.staircase import STAIRCASE, format_summary, write_csv  # noqa: E402
@@ -136,16 +136,15 @@ def main() -> int:
     )
 
     scenario = Scenario(weather=weather, start=START, finish=FINISH)
-    router_config = RouterConfig(
+    router = IsochroneRouter.from_dataset(
+        weather,
+        synthetic_cruising_polar(),
         dt_hours=1.0,
         n_headings=36,
         bin_deg=0.5,
         max_points=1200,
         finish_radius_nm=25.0,
         max_hours=150.0,
-    )
-    router = IsochroneRouter.from_dataset(
-        weather, synthetic_cruising_polar(), router_config
     )
     result = scenario.run(router)
     rows = result.rows
@@ -165,7 +164,7 @@ def main() -> int:
             scenario=f"{args.source}_canaries_cv",
             start=START,
             finish=FINISH,
-            router_config=router_config,
+            router_config=router.config_as_dict(),
             staircase=STAIRCASE,
             source={
                 "type": args.source,

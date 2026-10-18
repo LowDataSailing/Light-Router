@@ -29,7 +29,6 @@ from light_router.routing import (
     IsochroneRouter,
     Route,
     Router,
-    RouterConfig,
 )
 
 __version__ = "0.1.0"
@@ -41,6 +40,5 @@ __all__ = [
     "PolarTable",
     "Route",
     "Router",
-    "RouterConfig",
     "to_cf_dataset",
 ]
