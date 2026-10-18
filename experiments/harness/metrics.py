@@ -1,6 +1,8 @@
 """Route-quality metrics: degraded route vs the Level 1 reference route.
 
 All metrics are reported separately, never combined into one score.
+Wind exposure is sampled from the weather each route was planned against
+(a route is waypoints only — Decision #22).
 """
 
 from __future__ import annotations
@@ -10,12 +12,15 @@ import numpy as np
 from light_router.geo import great_circle_distance
 from experiments.models.experiment import RouteMetrics
 from light_router.models.route import Route, mean_vmg, route_bearing
+from light_router.models.weather import WeatherGrid
+from light_router.sampling import wind_along_route
 
 DECISION_SPLIT_DEG = 15.0  # initial-bearing split that counts as a different decision
 
 
-def _max_wind(route: Route) -> float:
-    sailing = route.tws[~np.isnan(route.tws)]
+def _max_wind(route: Route, grid: WeatherGrid) -> float:
+    tws, _ = wind_along_route(grid, route)
+    sailing = tws[~np.isnan(tws)]
     return float(np.max(sailing)) if sailing.size else 0.0
 
 
@@ -38,9 +43,17 @@ def _track_divergence(a: Route, b: Route, n_samples: int = 50) -> float:
 
 
 def compare_routes(
-    reference: Route, degraded: Route, finish: tuple[float, float]
+    reference: Route,
+    degraded: Route,
+    finish: tuple[float, float],
+    reference_grid: WeatherGrid,
+    degraded_grid: WeatherGrid,
 ) -> RouteMetrics:
-    """Compare a degraded route against the full-information reference."""
+    """Compare a degraded route against the full-information reference.
+
+    The grids are the weather each route was planned against — wind
+    exposure is sampled from them, not stored on the routes.
+    """
     if reference.eta_hours <= 0 or np.isnan(reference.eta_hours):
         raise ValueError("reference route has no ETA; cannot compute metrics")
 
@@ -69,7 +82,8 @@ def compare_routes(
         eta_diff_pct=eta_diff,
         distance_diff_pct=dist_diff,
         vmg_diff_kt=vmg_diff,
-        max_wind_diff_kt=_max_wind(degraded) - _max_wind(reference),
+        max_wind_diff_kt=_max_wind(degraded, degraded_grid)
+        - _max_wind(reference, reference_grid),
         decision_divergence=(
             not np.isnan(bearing_diff) and bearing_diff > DECISION_SPLIT_DEG
         ),

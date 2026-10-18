@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from light_router.dataset import dataset_extent
+from light_router.dataset import dataset_extent, grid_from_dataset
 from experiments.harness.staircase import StaircaseResult, budget_label, write_csv
 from experiments.models.passage import PassageResult
-from light_router.models.route import Route, RouterConfig
+from light_router.models.route import Route
 from light_router.provenance import git_sha
 
 MANIFEST_NAME = "manifest.json"
@@ -64,7 +64,7 @@ def write_manifest(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     staircase: list[int | None],
     weather: xr.Dataset,
     source: dict[str, object],
@@ -87,7 +87,7 @@ def write_manifest(
             "extent_east_west_south_north": list(dataset_extent(weather)),
         },
         "route": {"start": list(start), "finish": list(finish)},
-        "router_config": router_config.as_dict(),
+        "router_config": router_config,
         "staircase": staircase,
     }
     path = run_dir / MANIFEST_NAME
@@ -124,7 +124,7 @@ def write_artifacts(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     staircase: list[int | None],
     source: dict[str, object],
     routes: dict[str, Route] | None = None,
@@ -137,6 +137,8 @@ def write_artifacts(
     """
     from experiments.reporting.export import write_route_files
     from experiments.reporting.plots import write_plots
+
+    grid = grid_from_dataset(weather)
 
     write_manifest(
         run_dir,
@@ -151,11 +153,11 @@ def write_artifacts(
     write_csv(result.rows, run_dir / METRICS_NAME)
     write_wind_snapshot(run_dir, weather)
 
-    write_route_files(run_dir, result.reference, "route_reference")
+    write_route_files(run_dir, result.reference, "route_reference", grid)
     for row in result.rows:
-        write_route_files(run_dir, row.route, f"route_{budget_slug(row.budget)}")
+        write_route_files(run_dir, row.route, f"route_{budget_slug(row.budget)}", grid)
     for label, route in (routes or {}).items():
-        write_route_files(run_dir, route, label)
+        write_route_files(run_dir, route, label, grid)
 
     if plots:
         write_plots(run_dir, result, weather)
@@ -206,7 +208,7 @@ def write_operational_artifacts(
     scenario: str,
     start: tuple[float, float],
     finish: tuple[float, float],
-    router_config: RouterConfig,
+    router_config: dict[str, float | int],
     budgets: list[int | None],
     source: dict[str, object],
     plots: bool = True,
@@ -219,6 +221,8 @@ def write_operational_artifacts(
     """
     from experiments.reporting.export import write_route_files
     from experiments.reporting.plots import write_operational_plots
+
+    truth_grid = grid_from_dataset(truth)
 
     write_manifest(
         run_dir,
@@ -235,6 +239,8 @@ def write_operational_artifacts(
     _write_cycles_csv(run_dir / CYCLES_NAME, results)
     for result in results:
         label = budget_label(result.budget_bytes)
-        write_route_files(run_dir, result.as_route(), f"track_{budget_slug(label)}")
+        write_route_files(
+            run_dir, result.as_route(), f"track_{budget_slug(label)}", truth_grid
+        )
     if plots:
         write_operational_plots(run_dir, results, truth)

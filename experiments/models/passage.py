@@ -84,16 +84,18 @@ class PassageResult:
         return sum(record.package_bytes for record in self.cycles)
 
     def as_route(self) -> Route:
-        """The actual track as a Route, for export (GPX/GeoJSON) and plots."""
+        """The actual track as a Route, for export (GPX/GeoJSON) and plots.
+
+        The route carries the track geometry only; the experienced weather
+        stays on the passage result (it is simulation output, not router
+        output) and is sampled where exports need it.
+        """
+        from light_router.models.route import Waypoint
+
         return Route(
-            lat=self.lat,
-            lon=self.lon,
-            time=self.time,
-            heading=self.heading,
-            speed=self.speed,
-            tws=self.tws,
-            twa=self.twa,
+            waypoints=[
+                Waypoint(lat=float(la), lon=float(lo), time=float(ti))
+                for la, lo, ti in zip(self.lat, self.lon, self.time)
+            ],
             reached=self.reached,
-            eta_hours=self.passage_hours if self.reached else float("nan"),
-            distance_nm=self.distance_nm,
         )

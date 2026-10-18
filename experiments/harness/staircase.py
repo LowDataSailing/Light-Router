@@ -5,9 +5,10 @@ that fits, re-route on the degraded weather, and measure route-quality
 degradation against the Level 1 full-information reference route.
 
 The harness speaks the canonical CF xarray Dataset (Compatibility rule 1)
-and the Router protocol through a router factory (Compatibility rule 2):
-``router_factory(weather_dataset) -> Router``. The in-repo isochrone and an
-external oracle subprocess are interchangeable here.
+and the Router protocol (Compatibility rule 2): one router setup is
+passed in and re-bound to each weather package via ``for_weather``. The
+in-repo isochrone and an external oracle subprocess are interchangeable
+here.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from experiments.harness.metrics import compare_routes
 from experiments.models.experiment import StaircaseResult, StaircaseRow
 from light_router.models.route import Route
 from light_router.models.weather import WeatherGrid
-from light_router.routing import RouterFactory
+from light_router.routing import Router
 
 STAIRCASE: list[int | None] = [
     None,  # unlimited
@@ -56,7 +57,7 @@ def budget_label(budget: int | None) -> str:
 
 def run_staircase(
     weather: xr.Dataset,
-    router_factory: RouterFactory,
+    router: Router,
     start: tuple[float, float],
     finish: tuple[float, float],
     staircase: list[int | None] | None = None,
@@ -64,13 +65,15 @@ def run_staircase(
 ) -> StaircaseResult:
     """Run the degradation curve experiment. Returns one row per budget.
 
-    ``start_time`` is the departure time in hours since forecast
-    initialization; it is forwarded to the reference router and to every
-    budget-level router, so degraded routes are compared like for like.
+    ``router`` is one router setup (polar + config carried as attributes);
+    it is re-bound to the full-resolution weather for the reference route
+    and to each degraded package via ``for_weather``. ``start_time`` is the
+    departure time in hours since forecast initialization, forwarded to
+    every route call so degraded routes are compared like for like.
     """
     staircase = staircase if staircase is not None else STAIRCASE
     grid = grid_from_dataset(weather)
-    reference = router_factory(weather).route(start, finish, start_time)
+    reference = router.for_weather(weather).route(start, finish, start_time)
     if not reference.reached:
         raise RuntimeError(
             "reference route did not reach the finish; the scenario or the "
@@ -85,7 +88,7 @@ def run_staircase(
         rows.append(
             _run_level(
                 grid,
-                router_factory,
+                router,
                 reference,
                 config,
                 budget,
@@ -99,7 +102,7 @@ def run_staircase(
 
 def _run_level(
     grid: WeatherGrid,
-    router_factory: RouterFactory,
+    router: Router,
     reference: Route,
     config: DegradeConfig,
     budget: int | None,
@@ -110,10 +113,10 @@ def _run_level(
     """Route on one degraded package and measure it against the reference."""
     degraded_grid = degrade(grid, config)
     size = package_size(grid, config)
-    route = router_factory(to_cf_dataset(degraded_grid)).route(
+    route = router.for_weather(to_cf_dataset(degraded_grid)).route(
         start, finish, start_time
     )
-    metrics = compare_routes(reference, route, finish)
+    metrics = compare_routes(reference, route, finish, grid, degraded_grid)
     return StaircaseRow(
         budget=budget_label(budget),
         budget_bytes=budget,

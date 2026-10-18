@@ -27,15 +27,17 @@ import xarray as xr
 
 from light_router.dataset import grid_from_dataset, to_cf_dataset
 from light_router.geo import destination, great_circle_distance, initial_bearing
-from experiments.harness.degrade import best_config_for_budget, degrade, package_size
+from experiments.harness.degrade import (
+    CompressionMethod,
+    budget_staircase_compression,
+)
 from experiments.harness.staircase import budget_label
 from experiments.models.passage import CycleRecord, PassageResult
 from light_router.models.forecast import ForecastCycle
-from light_router.models.route import Route, RouterConfig
+from light_router.models.route import Route
 from light_router.models.vessel import PolarTable
 from light_router.models.weather import WeatherGrid
-from light_router.routing import RouterFactory
-from experiments.simulation.scenario import surrogate_router_factory
+from light_router.routing import Router
 
 
 @dataclass
@@ -66,28 +68,61 @@ def simulate_passage(
     cycles: list[ForecastCycle],
     start: tuple[float, float],
     finish: tuple[float, float],
+    router: Router,
     polar: PolarTable,
-    router_config: RouterConfig | None = None,
+    compression: CompressionMethod = budget_staircase_compression,
     *,
     budget_bytes: int | None = None,
-    cycle_hours: float = 6.0,
     dt_hours: float = 1.0,
     finish_radius_nm: float = 25.0,
     max_hours: float = 240.0,
 ) -> PassageResult:
     """Simulate one passage: replan on degraded forecasts, sail on truth.
 
-    ``truth`` is the measured-weather grid on the absolute passage clock
-    (hours since passage start). ``cycles`` are the GFS runs the router
-    may receive, sorted by init_hour; the newest run with
-    ``init_hour <= t`` is used at each planning cycle.
+    A real router at sea does not sail its forecast: it receives a new
+    (bandwidth-constrained) forecast package whenever a run becomes due,
+    replans from its current position, and the boat advances on whatever
+    the weather really does. This function mimics that, virtually, for a
+    past passage.
+
+    Args:
+        truth: The measured-weather grid on the absolute passage clock
+            (hours since passage start): the boat advances on it whatever
+            the forecast said. The source behind it is the experiment's
+            choice — the simulation is source-agnostic.
+        cycles: The forecast runs the router may receive, sorted by
+            ``init_hour``; at each planning opportunity the newest run
+            with ``init_hour <= t`` is degraded to the budget and
+            consumed. The replan cadence is therefore a property of this
+            data (today: one run every 6 h), not a knob.
+        start: Passage start, ``(lat, lon)`` in degrees.
+        finish: Passage finish, ``(lat, lon)`` in degrees.
+        router: One router setup (its config travels in its attributes);
+            re-bound to every received package via ``for_weather``.
+        polar: The boat's speed model — the boat advances on the truth
+            wind at the speed the polar allows.
+        compression: The degradation seam — how a forecast run becomes a
+            bandwidth-constrained package. Must report *measured* bytes;
+            ``None`` return means the budget cannot be met (no data this
+            cycle). Adaptive acquisition plugs in here.
+        budget_bytes: Cap on each received package; ``None`` means
+            unlimited — the reference condition of the staircase.
+        dt_hours: Simulation step: the boat advances in steps of this
+            size along the current plan, at the speed the *true* wind
+            allows.
+        finish_radius_nm: Arrival radius around the finish; the passage
+            ends (``reached`` is True) once the boat enters it.
+        max_hours: Simulation horizon: a passage that cannot finish
+            within it ends partial (``reached`` is False).
+
+    Returns:
+        The passage as it actually happened: track, arrival, and the
+        per-cycle records of what was received and believed.
     """
     if not cycles:
         raise ValueError("at least one forecast cycle is required")
     cycles = sorted(cycles, key=lambda c: c.init_hour)
-    cfg = router_config if router_config is not None else RouterConfig()
     truth_grid = grid_from_dataset(truth)
-    factory = surrogate_router_factory(polar, cfg)
 
     state = _PassageState(
         lat=start[0],
@@ -113,7 +148,7 @@ def simulate_passage(
         > finish_radius_nm
         and state.t < max_hours
     ):
-        _replan_due_cycles(state, cycles, budget_bytes, factory, finish)
+        _replan_due_cycles(state, cycles, budget_bytes, router, compression, finish)
         _advance_step(state, truth_grid, polar, dt_hours)
 
     reached = bool(
@@ -143,28 +178,28 @@ def _replan_due_cycles(
     state: _PassageState,
     cycles: list[ForecastCycle],
     budget_bytes: int | None,
-    factory: RouterFactory,
+    router: Router,
+    compression: CompressionMethod,
     finish: tuple[float, float],
 ) -> None:
-    """Planning cycle: consume every due forecast run (latest wins), degrade
+    """Planning cycle: consume every due forecast run (latest wins), compress
     the newest to the budget, and replan from the boat's current position."""
     while (
         state.cycle_idx < len(cycles) and cycles[state.cycle_idx].init_hour <= state.t
     ):
         cycle = cycles[state.cycle_idx]
         grid = grid_from_dataset(cycle.weather)
-        config = best_config_for_budget(grid, budget_bytes)
-        if config is not None:
-            size = package_size(grid, config)
-            state.plan = factory(to_cf_dataset(degrade(grid, config))).route(
+        package = compression(grid, budget_bytes)
+        if package is not None:
+            state.plan = router.for_weather(to_cf_dataset(package.grid)).route(
                 (state.lat, state.lon), finish, start_time=state.t - cycle.init_hour
             )
             state.plan_init = cycle.init_hour
             state.records.append(
                 CycleRecord(
                     hour=state.t,
-                    config=config,
-                    package_bytes=size,
+                    config=package.config,
+                    package_bytes=package.package_bytes,
                     plan_reached=state.plan.reached,
                     planned_arrival_hour=(
                         cycle.init_hour + state.plan.eta_hours
@@ -235,9 +270,10 @@ def run_operational_staircase(
     cycles: list[ForecastCycle],
     start: tuple[float, float],
     finish: tuple[float, float],
+    router: Router,
     polar: PolarTable,
     budgets: list[int | None],
-    router_config: RouterConfig | None = None,
+    compression: CompressionMethod = budget_staircase_compression,
     **sim_kwargs: object,
 ) -> list[PassageResult]:
     """Run the passage simulation once per budget (None = unlimited first)."""
@@ -249,8 +285,9 @@ def run_operational_staircase(
                 cycles,
                 start,
                 finish,
+                router,
                 polar,
-                router_config,
+                compression,
                 budget_bytes=budget,
                 **sim_kwargs,  # type: ignore[arg-type]
             )

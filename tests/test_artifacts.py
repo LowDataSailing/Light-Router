@@ -21,9 +21,8 @@ from experiments.reporting.artifacts import (
     write_artifacts,
 )
 from light_router.dataset import to_cf_dataset
-from light_router.routing import RouterConfig
+from light_router.routing import IsochroneRouter
 from experiments.synthetic_polar import synthetic_cruising_polar
-from experiments.simulation.scenario import surrogate_router_factory
 from experiments.harness.staircase import run_staircase
 from experiments.synthetic import add_storm, trade_wind_field
 
@@ -51,23 +50,22 @@ def make_grid():
 def result():
     grid = make_grid()
     weather = to_cf_dataset(grid)
-    factory = surrogate_router_factory(
+    router = IsochroneRouter.from_dataset(
+        weather,
         synthetic_cruising_polar(),
-        RouterConfig(
-            dt_hours=4.0,
-            n_headings=18,
-            bin_deg=2.0,
-            max_points=400,
-            finish_radius_nm=40.0,
-            max_hours=250.0,
-        ),
+        dt_hours=4.0,
+        n_headings=18,
+        bin_deg=2.0,
+        max_points=400,
+        finish_radius_nm=40.0,
+        max_hours=250.0,
     )
-    return weather, factory, run_staircase(weather, factory, START, FINISH, STAIRCASE)
+    return weather, router, run_staircase(weather, router, START, FINISH, STAIRCASE)
 
 
 @pytest.fixture(scope="module")
 def run_dir(result, tmp_path_factory):
-    weather, factory, staircase = result
+    weather, router, staircase = result
     base = tmp_path_factory.mktemp("runs")
     run_dir = new_run_dir(base, "synthetic_canaries_cv")
     write_artifacts(
@@ -77,14 +75,7 @@ def run_dir(result, tmp_path_factory):
         scenario="synthetic_canaries_cv",
         start=START,
         finish=FINISH,
-        router_config=RouterConfig(
-            dt_hours=4.0,
-            n_headings=18,
-            bin_deg=2.0,
-            max_points=400,
-            finish_radius_nm=40.0,
-            max_hours=250.0,
-        ),
+        router_config=router.config_as_dict(),
         staircase=STAIRCASE,
         source={"type": "synthetic"},
     )
@@ -192,29 +183,65 @@ def test_geojson_strict_parse(run_dir):
 
 
 def test_geojson_unreached_route_exports_nulls():
-    """An unreached route (NaN eta/distance, NaN-padded start) exports nulls."""
-    from experiments.reporting.export import route_to_geojson
-    from light_router.models.route import Route
+    """An unreached route (NaN eta) exports nulls, not NaN.
 
-    nan = float("nan")
+    ``distance_nm`` is derived from the waypoint geometry, so a partial
+    track still has a sailed distance; only the arrival time is null.
+    """
+    from experiments.reporting.export import route_to_geojson
+    from light_router.models.route import Route, Waypoint
+
     route = Route(
-        lat=np.array([28.0, 27.0]),
-        lon=np.array([-15.5, -16.0]),
-        time=np.array([0.0, 4.0]),
-        heading=np.array([nan, 180.0]),
-        speed=np.array([nan, 6.0]),
-        tws=np.array([nan, 15.0]),
-        twa=np.array([nan, 90.0]),
+        waypoints=[
+            Waypoint(lat=28.0, lon=-15.5, time=0.0),
+            Waypoint(lat=27.0, lon=-16.0, time=4.0),
+        ],
         reached=False,
-        eta_hours=nan,
-        distance_nm=nan,
     )
     feature = route_to_geojson(route, "unreached")
     assert feature["properties"]["eta_hours"] is None
-    assert feature["properties"]["distance_nm"] is None
+    assert feature["properties"]["distance_nm"] > 0.0
+    # waypoint 0 has no arriving leg: derived speed/heading are null
     assert feature["points"][0]["speed_kt"] is None
-    assert feature["points"][1]["speed_kt"] == 6.0
+    assert feature["points"][0]["heading_deg"] is None
+    # leg speed is derived from the waypoint geometry (1 deg / 4 h)
+    assert feature["points"][1]["speed_kt"] > 0.0
+    # wind is sampled from a grid when given, null without one
+    assert feature["points"][1]["tws_kt"] is None
     json.dumps(feature, allow_nan=False)
+
+
+def test_geojson_samples_wind_when_weather_given():
+    """Per-point wind comes from the grid the route is sampled against."""
+    from experiments.reporting.export import route_to_geojson
+    from light_router.dataset import grid_from_dataset
+    from light_router.models.route import Route, Waypoint
+
+    route = Route(
+        waypoints=[
+            Waypoint(lat=28.0, lon=-15.5, time=0.0),
+            Waypoint(lat=27.0, lon=-16.0, time=4.0),
+        ],
+        reached=True,
+    )
+    grid = grid_from_dataset(make_grid_result_weather())
+    feature = route_to_geojson(route, "sampled", weather=grid)
+    assert feature["points"][1]["tws_kt"] is not None
+    assert feature["points"][0]["twa_deg"] is None  # no arriving leg
+    json.dumps(feature, allow_nan=False)
+
+
+def make_grid_result_weather():
+    """A small CF weather dataset for GeoJSON wind-sampling tests."""
+    from light_router.dataset import to_cf_dataset
+    from experiments.synthetic import trade_wind_field
+
+    lats = np.arange(25.0, 30.01, 1.0)
+    lons = np.arange(-18.0, -13.99, 1.0)
+    times = np.arange(0.0, 13.0, 6.0)
+    return to_cf_dataset(
+        trade_wind_field(lats, lons, times, mean_speed_kt=15.0, direction_from_deg=45.0)
+    )
 
 
 # --- ticket #8: plots ---------------------------------------------------------

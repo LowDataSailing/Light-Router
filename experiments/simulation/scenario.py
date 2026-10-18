@@ -20,8 +20,7 @@ from dataclasses import dataclass, field
 
 import xarray as xr
 
-from light_router.routing import IsochroneRouter, Router, RouterConfig, RouterFactory
-from light_router.models.vessel import PolarTable
+from light_router.routing import Router
 from experiments.harness.staircase import STAIRCASE, StaircaseResult, run_staircase
 
 
@@ -35,31 +34,18 @@ class Scenario:
     start_time: float = 0.0  # hours since forecast initialization
     staircase: list[int | None] = field(default_factory=lambda: list(STAIRCASE))
 
-    def run(self, router_factory: RouterFactory) -> StaircaseResult:
-        """Run the degradation staircase for this scenario (the episode)."""
+    def run(self, router: Router) -> StaircaseResult:
+        """Run the degradation staircase for this scenario (the episode).
+
+        ``router`` is one router setup; the staircase re-binds it to the
+        full-resolution weather and to every degraded package via
+        ``for_weather``.
+        """
         return run_staircase(
             self.weather,
-            router_factory,
+            router,
             self.start,
             self.finish,
             self.staircase,
             start_time=self.start_time,
         )
-
-
-def surrogate_router_factory(
-    polar: PolarTable,
-    config: RouterConfig | None = None,
-) -> RouterFactory:
-    """Router factory for the in-repo provisional isochrone surrogate.
-
-    The oracle replacement is the same shape: a callable that binds a
-    weather dataset to a Router (for the oracle, an adapter that writes the
-    dataset to disk and drives the pinned subprocess).
-    """
-    cfg = config if config is not None else RouterConfig()
-
-    def factory(weather: xr.Dataset) -> Router:
-        return IsochroneRouter.from_dataset(weather, polar, cfg)
-
-    return factory

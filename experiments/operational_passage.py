@@ -69,7 +69,7 @@ from light_router.weather_data.pack import (  # noqa: E402
     write_pack,
 )
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
-from light_router.routing import RouterConfig  # noqa: E402
+from light_router.routing import IsochroneRouter  # noqa: E402
 from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
 from experiments.simulation.simulate import (  # noqa: E402
     format_operational_summary,
@@ -249,7 +249,10 @@ def main() -> int:
         f"{len(cycles)} forecast cycles"
     )
 
-    router_config = RouterConfig(
+    polar = synthetic_cruising_polar()
+    router = IsochroneRouter.from_dataset(
+        truth,
+        polar,
         dt_hours=1.0,
         n_headings=36,
         bin_deg=0.5,
@@ -262,10 +265,9 @@ def main() -> int:
         cycles,
         start_pos,
         finish_pos,
-        synthetic_cruising_polar(),
+        router,
+        polar,
         budgets,
-        router_config,
-        cycle_hours=6.0,
         dt_hours=1.0,
         finish_radius_nm=25.0,
         max_hours=args.max_passage_hours,
@@ -282,7 +284,7 @@ def main() -> int:
             scenario=args.scenario,
             start=start_pos,
             finish=finish_pos,
-            router_config=router_config,
+            router_config=router.config_as_dict(),
             budgets=budgets,
             source={
                 "type": "operational",

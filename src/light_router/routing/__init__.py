@@ -7,17 +7,15 @@ over the same protocol.
 
 from __future__ import annotations
 
-from light_router.models.route import Route, RouterConfig, mean_vmg, route_bearing
+from light_router.models.route import Route, mean_vmg, route_bearing
 from light_router.routing.isochrone import IsochroneRouter
-from light_router.routing.protocol import BaseRouter, Router, RouterFactory
+from light_router.routing.protocol import BaseRouter, Router
 
 __all__ = [
     "BaseRouter",
     "IsochroneRouter",
     "Route",
     "Router",
-    "RouterConfig",
-    "RouterFactory",
     "mean_vmg",
     "route_bearing",
 ]
