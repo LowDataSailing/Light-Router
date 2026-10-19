@@ -26,7 +26,7 @@ class Router(Protocol):
 
     name: str
     """Algorithm identity for run manifests — e.g.
-    ``isochrone-surrogate``; oracle adapters carry their pin here."""
+    ``IsochroneRouter``; oracle adapters carry their pin here."""
 
     def for_weather(self, weather: xr.Dataset) -> Router:
         """Bind this router's setup to a weather dataset.
@@ -65,8 +65,8 @@ class BaseRouter(ABC):
 
     name: ClassVar[str]
     """Algorithm identity for run manifests — the class name by default;
-    subclasses override with their published identity (e.g.
-    ``"isochrone-surrogate"``)."""
+    subclasses override with their published identity when the class
+    name is not it."""
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)

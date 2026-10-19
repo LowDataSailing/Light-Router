@@ -128,7 +128,7 @@ def test_base_router_name_defaults_to_class_name():
 
     assert MyRouter.name == "MyRouter"
     assert MyRouter().name == "MyRouter"
-    assert IsochroneRouter.name == "isochrone-surrogate"
+    assert IsochroneRouter.name == "IsochroneRouter"
 
 
 # --- compression seam: byte-honest by construction ---------------------------

@@ -86,7 +86,7 @@ def run_dir(results, tmp_path_factory):
         budgets=BUDGETS,
         source={"type": "operational", "truth": "synthetic"},
         plots=False,  # plots covered below with matplotlib present
-        router="isochrone-surrogate",
+        router="IsochroneRouter",
         polar=synthetic_cruising_polar(),
         polar_source="synthetic_cruising_polar",
         price_per_kb=0.01,
@@ -172,7 +172,7 @@ def test_operational_manifest(run_dir):
     assert manifest["staircase"] == BUDGETS
     assert manifest["source"]["truth"] == "synthetic"
     # routing-model identity: algorithm + polar provenance
-    assert manifest["router"]["algorithm"] == "isochrone-surrogate"
+    assert manifest["router"]["algorithm"] == "IsochroneRouter"
     assert manifest["polar"]["source"] == "synthetic_cruising_polar"
     assert manifest["polar"]["checksum"] == synthetic_cruising_polar().checksum
 

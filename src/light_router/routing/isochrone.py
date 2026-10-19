@@ -81,14 +81,6 @@ class IsochroneRouter(BaseRouter):
     """Candidates the polar cannot sail faster than are dropped
     (dead calm / head wind)."""
 
-    name = "isochrone-surrogate"
-    """Algorithm identity for run manifests — not the oracle
-    (Decision #15); validated against it before results depend on it."""
-
-    name = "isochrone-surrogate"
-    """Algorithm identity for run manifests — not the oracle
-    (Decision #15); validated against it before results depend on it."""
-
     @classmethod
     def from_dataset(
         cls,

@@ -312,7 +312,7 @@ def main() -> int:
                 "cycle_hours": 6,
                 **({"pack": args.pack} if args.pack else {}),
             },
-            router="isochrone-surrogate",
+            router=router.name,
             polar=polar,
             polar_source="synthetic_cruising_polar",
             price_per_kb=args.price_per_kb,
