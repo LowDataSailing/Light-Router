@@ -149,6 +149,10 @@
   App.prototype.setup = function () {
     var run = this.run;
     var manifest = run.manifest;
+    this.limitKt =
+      manifest.router_config && manifest.router_config.max_tws_kt
+        ? manifest.router_config.max_tws_kt
+        : null;
 
     document.getElementById("run-title").textContent =
       manifest.scenario + " — " + manifest.code_version;
@@ -528,6 +532,66 @@
       actx.closePath();
       actx.fill();
     }
+
+    if (this.limitKt) this.drawWindLimit(u, v, lats, lons, actx);
+  };
+
+  /* Wind-limit isoline: marching squares over the frame's speed grid at
+   * the router's planning limit (manifest.router_config.max_tws_kt),
+   * dashed red so the no-go zone reads at a glance. */
+  App.prototype.drawWindLimit = function (u, v, lats, lons, actx) {
+    var T = this.limitKt / MS_PER_KT; // wind.json u/v are m/s
+    var nlat = lats.length, nlon = lons.length;
+    var sp = [];
+    for (var r = 0; r < nlat; r++) {
+      var row = [];
+      for (var c = 0; c < nlon; c++) {
+        var uu = u[r][c], vv = v[r][c];
+        row.push(uu === null || vv === null ? null : Math.hypot(uu, vv));
+      }
+      sp.push(row);
+    }
+    var cross = function (r0, c0, r1, c1) {
+      var f = (T - sp[r0][c0]) / (sp[r1][c1] - sp[r0][c0]);
+      return [lerp(lats[r0], lats[r1], f), lerp(lons[c0], lons[c1], f)];
+    };
+    // cell edge helpers: top, right, bottom, left
+    var TOP = function (r, c) { return cross(r, c, r, c + 1); };
+    var RIGHT = function (r, c) { return cross(r, c + 1, r + 1, c + 1); };
+    var BOTTOM = function (r, c) { return cross(r + 1, c, r + 1, c + 1); };
+    var LEFT = function (r, c) { return cross(r, c, r + 1, c); };
+    // corner bits: tl=8, tr=4, br=2, bl=1 (above threshold)
+    var CASES = {
+      1: [[LEFT, BOTTOM]], 2: [[BOTTOM, RIGHT]], 3: [[LEFT, RIGHT]],
+      4: [[TOP, RIGHT]], 5: [[LEFT, TOP], [BOTTOM, RIGHT]],
+      6: [[TOP, BOTTOM]], 7: [[LEFT, TOP]],
+      8: [[TOP, LEFT]], 9: [[TOP, BOTTOM]], 10: [[TOP, RIGHT], [LEFT, BOTTOM]],
+      11: [[TOP, RIGHT]], 12: [[LEFT, RIGHT]],
+      13: [[BOTTOM, RIGHT]], 14: [[LEFT, BOTTOM]],
+    };
+    actx.strokeStyle = "rgba(220, 38, 38, 0.9)";
+    actx.lineWidth = 1.6;
+    actx.setLineDash([6, 4]);
+    actx.beginPath();
+    for (var r2 = 0; r2 < nlat - 1; r2++) {
+      for (var c2 = 0; c2 < nlon - 1; c2++) {
+        var a = sp[r2][c2], b = sp[r2][c2 + 1];
+        var d = sp[r2 + 1][c2 + 1], e = sp[r2 + 1][c2];
+        if (a === null || b === null || d === null || e === null) continue;
+        var idx = (a > T ? 8 : 0) | (b > T ? 4 : 0) | (d > T ? 2 : 0) | (e > T ? 1 : 0);
+        var segs = CASES[idx];
+        if (!segs) continue;
+        for (var k = 0; k < segs.length; k++) {
+          var p0 = segs[k][0](r2, c2), p1 = segs[k][1](r2, c2);
+          var q0 = this.map.latLngToLayerPoint(p0);
+          var q1 = this.map.latLngToLayerPoint(p1);
+          actx.moveTo(q0.x, q0.y);
+          actx.lineTo(q1.x, q1.y);
+        }
+      }
+    }
+    actx.stroke();
+    actx.setLineDash([]);
   };
 
   /* Standard wind barb geometry, into the wind. Shaft from the grid

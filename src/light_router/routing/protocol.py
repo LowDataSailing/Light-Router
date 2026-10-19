@@ -12,8 +12,8 @@ to rebind itself (Decision #22).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import replace
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field, fields, replace
+from typing import ClassVar, Protocol, runtime_checkable
 
 import xarray as xr
 
@@ -46,6 +46,7 @@ class Router(Protocol):
     ) -> Route: ...
 
 
+@dataclass
 class BaseRouter(ABC):
     """Nominal base class for routers we own.
 
@@ -58,7 +59,11 @@ class BaseRouter(ABC):
     construction; the protocol check stays the harness's only assumption.
     """
 
-    name: str
+    max_tws_kt: float | None = field(default=None, kw_only=True)
+    """Planning wind limit (kt): candidates in winds above it are
+    unsailable (Decision #20). ``None`` (the default) means no limit."""
+
+    name: ClassVar[str]
     """Algorithm identity for run manifests — the class name by default;
     subclasses override with their published identity (e.g.
     ``"isochrone-surrogate"``)."""
@@ -67,6 +72,20 @@ class BaseRouter(ABC):
         super().__init_subclass__(**kwargs)
         if "name" not in cls.__dict__:
             cls.name = cls.__name__
+
+    def config_as_dict(self) -> dict[str, float | int | None]:
+        """Plain-dict form of the tuning fields, for manifests.
+
+        One entry per scalar dataclass field (numbers and ``None``), so
+        a manifest fully determines the router configuration;
+        object-valued fields (weather, polar) are setup, not config,
+        and drop out.
+        """
+        return {
+            f.name: value
+            for f in fields(self)
+            if isinstance(value := getattr(self, f.name), (int, float)) or value is None
+        }
 
     def for_weather(self, weather: xr.Dataset) -> BaseRouter:
         """Re-bind to a new weather dataset.
@@ -79,7 +98,7 @@ class BaseRouter(ABC):
         """
         from light_router.dataset import grid_from_dataset
 
-        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type]
+        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type,call-arg]
 
     @abstractmethod
     def route(
