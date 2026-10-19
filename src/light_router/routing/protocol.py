@@ -12,7 +12,7 @@ to rebind itself (Decision #22).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import ClassVar, Protocol, runtime_checkable
 
 import xarray as xr
@@ -61,11 +61,7 @@ class BaseRouter(ABC):
 
     max_tws_kt: float | None = field(default=None, kw_only=True)
     """Planning wind limit (kt): candidates in winds above it are
-    unsailable (Decision #20). Optional and protocol-level: ``None``
-    (the default) keeps the Level 1 behavior — no upper limit — so a
-    router that cannot plan around wind simply leaves it unset. Readers
-    facing an arbitrary :class:`Router` must treat a missing attribute
-    as ``None``."""
+    unsailable (Decision #20). ``None`` (the default) means no limit."""
 
     name: ClassVar[str]
     """Algorithm identity for run manifests — the class name by default;
@@ -76,6 +72,20 @@ class BaseRouter(ABC):
         super().__init_subclass__(**kwargs)
         if "name" not in cls.__dict__:
             cls.name = cls.__name__
+
+    def config_as_dict(self) -> dict[str, float | int | None]:
+        """Plain-dict form of the tuning fields, for manifests.
+
+        One entry per scalar dataclass field (numbers and ``None``), so
+        a manifest fully determines the router configuration;
+        object-valued fields (weather, polar) are setup, not config,
+        and drop out.
+        """
+        return {
+            f.name: value
+            for f in fields(self)
+            if isinstance(value := getattr(self, f.name), (int, float)) or value is None
+        }
 
     def for_weather(self, weather: xr.Dataset) -> BaseRouter:
         """Re-bind to a new weather dataset.
