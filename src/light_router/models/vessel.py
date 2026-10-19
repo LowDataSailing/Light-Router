@@ -10,6 +10,7 @@ code).
 from __future__ import annotations
 
 import csv
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,16 @@ class PolarTable:
             raise ValueError(f"speed has shape {self.speed.shape}, expected {expected}")
         if np.any(self.speed < 0):
             raise ValueError("polar speeds must be non-negative")
+
+    @property
+    def checksum(self) -> str:
+        """SHA-256 over the table axes and speeds — the polar's provenance
+        fingerprint for run manifests: which boat ran the
+        route must be visible in the artifact."""
+        h = hashlib.sha256()
+        for arr in (self.tws, self.twa, self.speed):
+            h.update(np.ascontiguousarray(arr, dtype=float).tobytes())
+        return h.hexdigest()
 
     def boat_speed(
         self, tws: np.ndarray | float, twa: np.ndarray | float
