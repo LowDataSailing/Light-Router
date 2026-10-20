@@ -60,7 +60,7 @@ def test_validate_surrogate_against_stub_oracle(stub_binary):
         surrogate_kwargs=SURROGATE_KWARGS,
     )
     assert report["oracle"].startswith("opencpn-weather-routing@")
-    assert report["surrogate"] == "isochrone-surrogate"
+    assert report["surrogate"] == "IsochroneRouter"
     assert report["oracle_reached"]
     assert report["surrogate_reached"]
     # the stub oracle exposes endpoints only; the report records that

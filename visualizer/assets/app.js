@@ -171,6 +171,7 @@
     this.setupMap();
     this.setupTimeline();
     this.setupPanel();
+    this.setupPassageTable();
     this.renderFrame();
   };
 
@@ -352,6 +353,55 @@
         return s === null ? "unlimited" : (s >= 1000 ? s / 1000 + " KB" : s + " B");
       }).join(" · ") + "</b><br>" +
       "checksum: <b>" + String(m.data_checksum || "").slice(0, 12) + "</b>";
+  };
+
+  /* Passage table: one row per budget (and the no-limit reference rows
+   * when the run carries a planning wind limit). Column set adapts to
+   * what the artifacts carry; wind_penalty_hours only exists when the
+   * reference staircase ran. */
+  App.prototype.setupPassageTable = function () {
+    var rows = this.run.passage;
+    if (!rows || !rows.length) return;
+    var columns = [
+      ["budget", "budget"],
+      ["passage_hours", "h"],
+      ["distance_nm", "nm"],
+      ["max_tws_kt", "max kt"],
+      ["wind_limit_kt", "limit"],
+      ["wind_penalty_hours", "penalty h"],
+    ];
+    var keys = Object.keys(rows[0]);
+    var shown = columns.filter(function (c) {
+      return keys.indexOf(c[0]) >= 0;
+    });
+    var thead = document.querySelector("#passage-table thead");
+    thead.innerHTML =
+      "<tr>" +
+      shown
+        .map(function (c) {
+          return "<th>" + c[1] + "</th>";
+        })
+        .join("") +
+      "</tr>";
+    var tbody = document.querySelector("#passage-table tbody");
+    rows.forEach(function (r) {
+      var tr = document.createElement("tr");
+      shown.forEach(function (c) {
+        var v = r[c[0]];
+        var td = document.createElement("td");
+        td.textContent = v === undefined || v === "" ? "-" : v;
+        if (c[0] === "wind_penalty_hours" && v && parseFloat(v) > 0) {
+          td.className = "penalty-worse";
+        }
+        if (c[0] === "wind_limit_kt" && v === "none") {
+          td.className = "reference-row";
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    document.getElementById("passage-heading").hidden = false;
+    document.getElementById("passage-wrap").hidden = false;
   };
 
   App.prototype.setFrame = function (i) {

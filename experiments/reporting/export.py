@@ -26,6 +26,8 @@ def _json_float(value: object) -> float | None:
     NaN eta/distance when unreached; bare ``NaN`` tokens are invalid JSON
     for browsers and strict parsers (issue #23), so they export as ``null``.
     """
+    if not isinstance(value, (float, int)):
+        return None
     number = float(value)
     return number if math.isfinite(number) else None
 

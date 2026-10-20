@@ -24,7 +24,7 @@ from light_router.models.route import Route
 class Router(Protocol):
     """The routing interface every router implements (Compatibility rule 2)."""
 
-    name: str
+    name: ClassVar[str]
     """Algorithm identity for run manifests — e.g.
     ``IsochroneRouter``; oracle adapters carry their pin here."""
 
@@ -87,7 +87,7 @@ class BaseRouter(ABC):
             if isinstance(value := getattr(self, f.name), (int, float)) or value is None
         }
 
-    def for_weather(self, weather: xr.Dataset) -> BaseRouter:
+    def for_weather(self, weather: xr.Dataset) -> Router:
         """Re-bind to a new weather dataset.
 
         The default replaces the ``grid`` field (dataclasses.replace on a
@@ -98,7 +98,7 @@ class BaseRouter(ABC):
         """
         from light_router.dataset import grid_from_dataset
 
-        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type,call-arg]
+        return replace(self, grid=grid_from_dataset(weather))  # type: ignore[type-var,arg-type,call-arg,return-value]
 
     @abstractmethod
     def route(

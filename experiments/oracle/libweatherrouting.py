@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from importlib import metadata
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import xarray as xr
@@ -33,6 +33,11 @@ from experiments.synthetic import SYNTHETIC_EPOCH
 
 LIBWEATHERROUTING_PACKAGE = "weatherrouting"
 """PyPI package name of libweatherrouting (the import name is the same)."""
+
+try:
+    _LIBWEATHERROUTING_VERSION: str = metadata.version(LIBWEATHERROUTING_PACKAGE)
+except metadata.PackageNotFoundError:  # package absent: import stays safe
+    _LIBWEATHERROUTING_VERSION = "unknown"
 
 KT_PER_MS = 1.94384
 """Knots per m/s — the unit seam between our grid (m/s) and the library."""
@@ -146,11 +151,8 @@ class LibWeatherRoutingRouter:
     """Calendar time of weather hour 0 (UTC); None means the synthetic
     epoch (``experiments.synthetic.SYNTHETIC_EPOCH``)."""
 
-    @property
-    def name(self) -> str:
-        """Adapter identity: the measured version of the wrapped package."""
-        version = metadata.version(LIBWEATHERROUTING_PACKAGE)
-        return f"libweatherrouting@{version}"
+    name: ClassVar[str] = f"libweatherrouting@{_LIBWEATHERROUTING_VERSION}"
+    """Adapter identity: the measured version of the wrapped package."""
 
     def for_weather(self, weather: xr.Dataset) -> LibWeatherRoutingRouter:
         """Bind this oracle setup to a weather dataset (plain replace)."""

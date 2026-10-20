@@ -45,7 +45,7 @@ VALIDATION_START = (28.0, -15.5)
 VALIDATION_FINISH = (16.75, -22.9)
 """Default scenario finish: Mindelo, Cape Verde (deg)."""
 
-SURROGATE_NAME = "isochrone-surrogate"
+SURROGATE_NAME = "IsochroneRouter"
 """Identity of the in-repo router under validation."""
 
 

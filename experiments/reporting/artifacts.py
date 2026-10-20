@@ -187,7 +187,12 @@ def write_artifacts(
 
 
 def _write_passage_csv(
-    path: Path, results: list[PassageResult], price_per_kb: float | None = None
+    path: Path,
+    results: list[PassageResult],
+    price_per_kb: float | None = None,
+    *,
+    wind_limit_kt: float | None = None,
+    wind_reference: list[PassageResult] | None = None,
 ) -> None:
     """One row per budget: the actual passage outcome on measured weather.
 
@@ -195,18 +200,39 @@ def _write_passage_csv(
     a budget must buy ETA in time/VMG, never in weather. ``cost_eur``
     prices the delivered bytes at ``price_per_kb`` (Decision
     #21: delivered package bytes only); empty when no price is configured.
+    ``wind_limit_kt`` labels the planning wind limit the router planned
+    under ("none" for the no-limit rows) and ``wind_penalty_hours`` is
+    the passage time the limit costs at that budget: eta limited minus
+    eta of the same budget in the no-limit reference staircase.
     """
+    reference_eta: dict[str, float] = {}
+    if wind_reference is not None:
+        for ref in wind_reference:
+            reference_eta[budget_label(ref.budget_bytes)] = ref.passage_hours
+
     lines = [
         "budget,total_package_bytes,cost_eur,cycles,passage_hours,distance_nm,"
         "max_tws_kt,mean_tws_kt,pct_upwind,pct_downwind,"
-        "compute_total_s,compute_mean_s,reached"
+        "compute_total_s,compute_mean_s,reached,"
+        "wind_limit_kt,wind_penalty_hours"
     ]
-    for result in results:
+    rows: list[tuple[PassageResult, float | None]] = [
+        (r, wind_limit_kt) for r in results
+    ]
+    if wind_reference is not None:
+        rows.extend((r, None) for r in wind_reference)
+    for result, limit in rows:
         cost = (
             f"{result.total_package_bytes / 1000 * price_per_kb:.2f}"
             if price_per_kb is not None
             else ""
         )
+        penalty = ""
+        if limit is not None:
+            ref_eta = reference_eta.get(budget_label(result.budget_bytes))
+            penalty = (
+                f"{result.passage_hours - ref_eta:+.2f}" if ref_eta is not None else ""
+            )
         lines.append(
             f"{budget_label(result.budget_bytes)},"
             f"{result.total_package_bytes},{cost},{len(result.cycles)},"
@@ -214,7 +240,8 @@ def _write_passage_csv(
             f"{result.max_tws_kt:.1f},{result.mean_tws_kt:.1f},"
             f"{100 * result.upwind_fraction:.0f},{100 * result.downwind_fraction:.0f},"
             f"{result.compute_seconds_total:.2f},{result.compute_seconds_mean:.2f},"
-            f"{result.reached}"
+            f"{result.reached},"
+            f"{limit if limit is not None else 'none'},{penalty}"
         )
     path.write_text("\n".join(lines) + "\n")
 
@@ -300,13 +327,18 @@ def write_operational_artifacts(
     polar: PolarTable | None = None,
     polar_source: str | None = None,
     price_per_kb: float | None = None,
+    wind_limit_kt: float | None = None,
+    wind_reference: list[PassageResult] | None = None,
 ) -> None:
     """Write the operational run directory: manifest, CSVs, tracks, plots.
 
     ``truth`` is the measured-weather grid the boat actually sailed on; it
     feeds the manifest provenance checksum, the wind snapshot and the plot
     underlay. ``router``/``polar`` record the routing-model identity;
-    ``price_per_kb`` prices the bandwidth ledger.
+    ``price_per_kb`` prices the bandwidth ledger. ``wind_reference`` is the
+    same staircase run without the planning wind limit: each budget's
+    ``wind_penalty_hours`` column is the passage time the limit costs
+    (eta limited - eta free); ``wind_limit_kt`` labels the rows.
     """
     from experiments.reporting.export import write_route_files
     from experiments.reporting.plots import write_operational_plots
@@ -327,7 +359,13 @@ def write_operational_artifacts(
         polar_source=polar_source,
     )
     write_wind_snapshot(run_dir, truth)
-    _write_passage_csv(run_dir / PASSAGE_NAME, results, price_per_kb)
+    _write_passage_csv(
+        run_dir / PASSAGE_NAME,
+        results,
+        price_per_kb,
+        wind_limit_kt=wind_limit_kt,
+        wind_reference=wind_reference,
+    )
     _write_cycles_csv(run_dir / CYCLES_NAME, results)
     for result in results:
         label = budget_label(result.budget_bytes)

@@ -205,10 +205,23 @@ def export_run(run_dir: Path, out_dir: Path, packs_dir: Path, frame_hours: float
     if wind is None:
         print("  wind unavailable: no data pack, no snapshot", file=sys.stderr)
 
+    passage = None
+    passage_csv = run_dir / "passage.csv"
+    if passage_csv.exists():
+        rows = []
+        with open(passage_csv) as fh:
+            header = fh.readline().strip().split(",")
+            for line in fh:
+                values = line.strip().split(",")
+                if len(values) == len(header):
+                    rows.append(dict(zip(header, values)))
+        passage = rows
+
     run_index = {
         "manifest": manifest,
         "tracks": tracks,
         "wind": wind,
+        "passage": passage,
     }
     write_json(run_out / "run.json", run_index)
     write_text(run_out / "index.html", (ASSETS / "run.html").read_text())
