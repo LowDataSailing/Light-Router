@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -860,6 +860,7 @@ docs = [
 ]
 grib = [
     { name = "cfgrib" },
+    { name = "eccodes" },
 ]
 oracle = [
     { name = "weatherrouting" },
@@ -887,7 +888,10 @@ docs = [
     { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.2.0" },
     { name = "mkdocs-material", specifier = ">=9.5.0" },
 ]
-grib = [{ name = "cfgrib", specifier = ">=0.9.10.4" }]
+grib = [
+    { name = "cfgrib", specifier = ">=0.9.10.4" },
+    { name = "eccodes", specifier = ">=1.7.0" },
+]
 oracle = [{ name = "weatherrouting", specifier = ">=0.2.3" }]
 plot = [{ name = "matplotlib", specifier = ">=3.7" }]
 

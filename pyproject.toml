@@ -62,6 +62,7 @@ docs = [
 ]
 grib = [
     "cfgrib>=0.9.10.4",
+    "eccodes>=1.7.0",
 ]
 artifacts = [
     "gpxpy>=1.6",

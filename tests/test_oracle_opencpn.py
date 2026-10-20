@@ -19,8 +19,9 @@ from experiments.oracle.opencpn import (
     OPENCPN_ORACLE_REPO,
     OpenCPNConfig,
     OpenCPNRouter,
-    build_scenario,
+    OpenCPNScenario,
     parse_result,
+    write_wind_field_json,
 )
 from experiments.synthetic import SYNTHETIC_EPOCH, trade_wind_field
 from experiments.synthetic_polar import synthetic_cruising_polar
@@ -30,11 +31,14 @@ START = (28.0, -15.5)
 FINISH = (16.75, -22.9)
 
 
-def make_weather():
+def make_weather(mean_speed_kt: float = 15.0):
     lats = np.arange(12.0, 32.01, 1.0)
     lons = np.arange(-26.0, -12.99, 1.0)
-    times = np.arange(0.0, 121.0, 6.0)
-    return to_cf_dataset(trade_wind_field(lats, lons, times))
+    # 240 h: the horizon must cover the ~120 h passage plus late starts
+    times = np.arange(0.0, 241.0, 6.0)
+    return to_cf_dataset(
+        trade_wind_field(lats, lons, times, mean_speed_kt=mean_speed_kt)
+    )
 
 
 @pytest.fixture
@@ -97,7 +101,7 @@ def test_route_writes_the_scenario_contract(stub_binary, tmp_path):
     assert scenario["startTime"] == "2026-01-01T06:00:00Z"
     assert scenario["environment"] == {"useCurrents": False, "useGrib": True}
     route = scenario["route"]
-    assert route["boatFile"].endswith("polar.csv")
+    assert route["boatFile"].endswith("boat.xml")
     assert route["timeStepSeconds"] == 3600
     assert route["headingFromDegrees"] == 0.0
     assert route["headingToDegrees"] == 360.0
@@ -117,13 +121,36 @@ def test_route_writes_wind_field_and_polar(stub_binary, tmp_path):
     weather = router.weather
     router.route(START, FINISH)
 
-    wind = json.loads((tmp_path / "work" / "wind_field.json").read_text())
+    work = tmp_path / "work"
+    wind_json = work / "wind_field.json"
+    wind_grib = work / "wind_field.grib2"
+    if wind_json.exists():
+        # dependency-free fallback (no grib group): the JSON wind field
+        wind = json.loads(wind_json.read_text())
+        assert len(wind["lats"]) == weather.sizes["latitude"]
+        assert len(wind["lons"]) == weather.sizes["longitude"]
+        assert len(wind["times_hours"]) == weather.sizes["time"]
+        assert len(wind["u10_ms"]) == weather.sizes["time"]
+    else:
+        # ecCodes available: real GRIB2 (magic bytes), same variables
+        assert wind_grib.read_bytes()[:4] == b"GRIB"
+    boat_xml = (work / "boat.xml").read_text()
+    assert "OpenCPNWeatherRoutingBoat" in boat_xml
+    pol = (work / "polar.pol").read_text()
+    assert pol.startswith("twa/tws;")
+
+
+def test_write_wind_field_json_writes_the_fallback_form(tmp_path):
+    # the dependency-free fallback input (environments without the grib
+    # group); pinned directly so it stays correct even where ecCodes is
+    # installed and the adapter writes GRIB2 instead
+    weather = make_weather()
+    path = tmp_path / "wind_field.json"
+    write_wind_field_json(weather, path)
+    wind = json.loads(path.read_text())
+    assert set(wind) == {"lats", "lons", "times_hours", "u10_ms", "v10_ms"}
     assert len(wind["lats"]) == weather.sizes["latitude"]
-    assert len(wind["lons"]) == weather.sizes["longitude"]
     assert len(wind["times_hours"]) == weather.sizes["time"]
-    assert len(wind["u10_ms"]) == weather.sizes["time"]
-    polar_csv = (tmp_path / "work" / "polar.csv").read_text()
-    assert polar_csv.startswith("TWA\\TWS")
 
 
 def test_stub_result_parsed_into_route(stub_binary, tmp_path):
@@ -161,6 +188,31 @@ def test_stub_failure_result_is_partial_route(stub_binary, tmp_path, monkeypatch
     assert route.distance_nm == 0.0
 
 
+def test_stub_eta_depends_on_the_weather(stub_binary, tmp_path):
+    # the stub's straight line sails at the speed the actual weather and
+    # polar allow: a stronger wind is a different (faster) passage, not
+    # the constant-speed fiction
+    router = make_router(stub_binary, tmp_path)
+    route_light = router.route(START, FINISH)
+    route_strong = router.for_weather(make_weather(mean_speed_kt=25.0)).route(
+        START, FINISH
+    )
+    assert route_light.reached and route_strong.reached
+    assert route_strong.eta_hours < route_light.eta_hours
+
+
+def test_stub_dead_calm_means_no_movement(stub_binary, tmp_path):
+    # dead calm: the boat cannot sail the line at all — the runner's
+    # honest no_completed_routes failure, parsed as the start-only
+    # partial route (the boat not moving)
+    router = make_router(stub_binary, tmp_path)
+    calm = make_weather(mean_speed_kt=0.0)
+    route = router.for_weather(calm).route(START, FINISH)
+    assert not route.reached
+    assert route.n_waypoints == 1
+    assert (route.lat[0], route.lon[0]) == START
+
+
 def test_parse_result_rejects_incomplete_status():
     payload = {
         "schemaVersion": 1,
@@ -194,7 +246,7 @@ def test_parse_result_picks_fastest_completed_candidate():
     )
 
 
-def test_build_scenario_carries_custom_config():
+def test_scenario_payload_carries_custom_config():
     config = OpenCPNConfig(
         time_step_seconds=7200,
         heading_step_deg=10.0,
@@ -205,15 +257,35 @@ def test_build_scenario_carries_custom_config():
         land_margin_nm=5.0,
         minimum_depth_m=2.0,
     )
-    scenario = build_scenario(START, FINISH, SYNTHETIC_EPOCH, Path("/b/p.csv"), config)
-    assert scenario["route"]["timeStepSeconds"] == 7200
-    assert scenario["route"]["headingStepDegrees"] == 10.0
-    assert scenario["route"]["maxTrueWindKnots"] == 35.0
-    assert scenario["route"]["routingEffortPercent"] == 200
-    assert scenario["safety"]["mode"] == "gshhs"
-    assert scenario["safety"]["enforce"] is True
-    assert scenario["safety"]["landMarginNm"] == 5.0
-    assert scenario["safety"]["minimumDepthM"] == 2.0
+    scenario = OpenCPNScenario(
+        start=START,
+        finish=FINISH,
+        departure=SYNTHETIC_EPOCH,
+        boat_file=Path("/b/p.csv"),
+        config=config,
+    )
+    payload = scenario.to_payload()
+    assert payload["route"]["timeStepSeconds"] == 7200
+    assert payload["route"]["headingStepDegrees"] == 10.0
+    assert payload["route"]["maxTrueWindKnots"] == 35.0
+    assert payload["route"]["routingEffortPercent"] == 200
+    assert payload["safety"]["mode"] == "gshhs"
+    assert payload["safety"]["enforce"] is True
+    assert payload["safety"]["landMarginNm"] == 5.0
+    assert payload["safety"]["minimumDepthM"] == 2.0
+
+
+def test_scenario_payload_carries_default_config():
+    payload = OpenCPNScenario(
+        start=START,
+        finish=FINISH,
+        departure=SYNTHETIC_EPOCH,
+        boat_file=Path("/b/p.csv"),
+    ).to_payload()
+    assert payload["schemaVersion"] == 1
+    assert payload["startTime"] == "2026-01-01T00:00:00Z"
+    assert payload["route"]["routingEffortPercent"] == 100
+    assert payload["safety"]["mode"] == "none"
 
 
 def test_config_rejects_invalid_values():

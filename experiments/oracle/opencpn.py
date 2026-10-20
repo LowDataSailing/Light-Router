@@ -14,13 +14,12 @@ informative error naming the exact pin. The tests exercise the full JSON
 contract with a stub binary (``tests/wr_headless_stub.py``) that mimics the
 ``WR_HEADLESS_*`` interface.
 
-GRIB gap (honest limitation): the pinned binary consumes GRIB2 through
-``WR_HEADLESS_GRIB_FILE``, but this repo's GRIB support is read-only (cfgrib)
-and no GRIB2 encoder is a current dependency. Until one lands, the adapter
-writes the wind field as JSON (:func:`write_wind_field_json`) and passes it
-through the same environment variable; the stub tests pin the
-scenario/result contract, not the GRIB encoding. Swapping in a real GRIB2
-writer is a one-function change behind that seam.
+Weather input: the pinned binary consumes GRIB2 through
+``WR_HEADLESS_GRIB_FILE``. The adapter writes real GRIB2 via
+:class:`~light_router.models.weather.WeatherGrid.to_grib2` when the
+optional ``grib`` dependency group (ecCodes) is installed, and falls back
+to a JSON wind field (:func:`write_wind_field_json`) otherwise — the
+contract stub accepts either, it only requires the file to exist.
 """
 
 from __future__ import annotations
@@ -125,45 +124,61 @@ class OpenCPNConfig:
             )
 
 
-def build_scenario(
-    start: tuple[float, float],
-    finish: tuple[float, float],
-    start_datetime: datetime,
-    boat_file: Path,
-    config: OpenCPNConfig,
-) -> dict[str, Any]:
-    """Build the headless scenario JSON (a plain dict) for one passage.
+@dataclass
+class OpenCPNScenario:
+    """One passage as the fork's headless runner sees it (typed form).
 
-    ``start_datetime`` is the departure instant (UTC). The layout mirrors
-    the fork's documented schema: ``start``/``end`` positions, ``startTime``,
-    a ``route`` block (polar, time step, heading range, wind constraints,
-    effort) and a ``safety`` block.
+    The harness's passage concepts (endpoints, departure, polar, oracle
+    tuning) as one typed object; :meth:`to_payload` serializes it into the
+    fork's documented JSON schema (``start``/``end`` positions,
+    ``startTime``, a ``route`` block and a ``safety`` block). The JSON
+    layout is the external contract and stays verbatim; the dataclass is
+    the typed, documented surface the adapter and tests build on.
     """
-    return {
-        "schemaVersion": SCENARIO_SCHEMA_VERSION,
-        "name": f"Light-Router oracle validation {start} -> {finish}",
-        "start": {"name": "start", "lat": start[0], "lon": start[1]},
-        "end": {"name": "finish", "lat": finish[0], "lon": finish[1]},
-        "startTime": start_datetime.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "environment": {"useCurrents": False, "useGrib": True},
-        "route": {
-            "boatFile": str(boat_file),
-            "timeStepSeconds": config.time_step_seconds,
-            "headingFromDegrees": config.heading_from_deg,
-            "headingToDegrees": config.heading_to_deg,
-            "headingStepDegrees": config.heading_step_deg,
-            "maxTrueWindKnots": config.max_true_wind_knots,
-            "maxApparentWindKnots": config.max_apparent_wind_knots,
-            "routingEffortPercent": config.routing_effort_percent,
-        },
-        "safety": {
-            "mode": config.safety_mode,
-            "enforce": config.safety_enforce,
-            "landMarginNm": config.land_margin_nm,
-            "minimumDepthM": config.minimum_depth_m,
-            "persistentCertifiedCacheEnabled": False,
-        },
-    }
+
+    start: tuple[float, float]
+    """Passage start (lat, lon) in degrees."""
+
+    finish: tuple[float, float]
+    """Passage finish (lat, lon) in degrees."""
+
+    departure: datetime
+    """Departure instant (UTC) — the scenario's ``startTime``."""
+
+    boat_file: Path
+    """Boat XML the router will sail (``route.boatFile``): an
+    OpenCPNWeatherRoutingBoat file referencing a ``.pol`` polar."""
+
+    config: OpenCPNConfig = field(default_factory=OpenCPNConfig)
+    """Oracle tuning mirrored one-to-one into the scenario's blocks."""
+
+    def to_payload(self) -> dict[str, Any]:
+        """The headless scenario JSON (a plain dict) for one passage."""
+        return {
+            "schemaVersion": SCENARIO_SCHEMA_VERSION,
+            "name": f"Light-Router oracle validation {self.start} -> {self.finish}",
+            "start": {"name": "start", "lat": self.start[0], "lon": self.start[1]},
+            "end": {"name": "finish", "lat": self.finish[0], "lon": self.finish[1]},
+            "startTime": self.departure.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "environment": {"useCurrents": False, "useGrib": True},
+            "route": {
+                "boatFile": str(self.boat_file),
+                "timeStepSeconds": self.config.time_step_seconds,
+                "headingFromDegrees": self.config.heading_from_deg,
+                "headingToDegrees": self.config.heading_to_deg,
+                "headingStepDegrees": self.config.heading_step_deg,
+                "maxTrueWindKnots": self.config.max_true_wind_knots,
+                "maxApparentWindKnots": self.config.max_apparent_wind_knots,
+                "routingEffortPercent": self.config.routing_effort_percent,
+            },
+            "safety": {
+                "mode": self.config.safety_mode,
+                "enforce": self.config.safety_enforce,
+                "landMarginNm": self.config.land_margin_nm,
+                "minimumDepthM": self.config.minimum_depth_m,
+                "persistentCertifiedCacheEnabled": False,
+            },
+        }
 
 
 def parse_result(
@@ -217,15 +232,66 @@ def _partial_route(start: tuple[float, float], start_time: float) -> Route:
     )
 
 
-def write_wind_field_json(weather: xr.Dataset, path: Path) -> None:
-    """Write the wind field as JSON for the oracle's weather input.
+def _eccodes_available() -> bool:
+    """Whether the optional ecCodes encoder is importable in this env."""
+    try:
+        import eccodes  # noqa: F401
 
-    GRIB gap: the pinned binary expects a GRIB2 file at
-    ``WR_HEADLESS_GRIB_FILE``, but writing GRIB2 needs an encoder that is
-    not a dependency of this repo (cfgrib only reads). Until a GRIB2 writer
-    lands, the adapter writes the u10/v10 field (m/s, on the dataset's
-    lat/lon/time axes, time in hours since initialization) as JSON and
-    passes it through the same variable; the stub binary pins the contract.
+        return True
+    except ImportError:
+        return False
+
+
+def write_boat_files(polar: PolarTable, workdir: Path) -> Path:
+    """Write the boat XML + polar pair the runner consumes; return the boat file.
+
+    ``route.boatFile`` must be an OpenCPNWeatherRoutingBoat XML
+    referencing the polar in the plugin's semicolon ``.pol`` format
+    (``twa/tws`` header, one row per TWA); a bare CSV is not a boat file
+    and the routing fails on a modal error dialog. The polar is
+    referenced by absolute path so it resolves wherever the workdir is
+    mounted.
+    """
+    pol_path = workdir / "polar.pol"
+    lines = ["twa/tws;" + ";".join(f"{v:g}" for v in polar.tws)]
+    for j, angle in enumerate(polar.twa):
+        lines.append(";".join([f"{angle:g}"] + [f"{v:g}" for v in polar.speed[:, j]]))
+    pol_path.write_text("\n".join(lines) + "\n")
+
+    boat_path = workdir / "boat.xml"
+    boat_path.write_text(
+        '<?xml version="1.0" encoding="utf-8" ?>\n'
+        '<OpenCPNWeatherRoutingBoat version="1.13" '
+        'creator="Light-Router oracle adapter">\n'
+        f'    <Polar FileName="{pol_path}" CrossOverPercentage="0" />\n'
+        "</OpenCPNWeatherRoutingBoat>\n"
+    )
+    return boat_path
+
+
+def write_wind_field(weather: xr.Dataset, path: Path, epoch: datetime) -> None:
+    """Write the oracle's weather input: GRIB2 when ecCodes is available.
+
+    The pinned binary expects GRIB2 at ``WR_HEADLESS_GRIB_FILE``; with the
+    optional ``grib`` dependency group installed the adapter writes a real
+    GRIB2 wind file (:meth:`~light_router.models.weather.WeatherGrid.to_grib2`,
+    one message per variable per step, ``epoch`` as reference time).
+    Without ecCodes it falls back to the JSON form — the contract stub
+    accepts either, it only requires the file to exist.
+    """
+    if _eccodes_available():
+        grid_from_dataset(weather).to_grib2(path, epoch)
+    else:
+        write_wind_field_json(weather, path)
+
+
+def write_wind_field_json(weather: xr.Dataset, path: Path) -> None:
+    """Write the wind field as JSON — the dependency-free fallback input.
+
+    The u10/v10 field (m/s, on the dataset's lat/lon/time axes, time in
+    hours since initialization) as plain JSON; the contract stub pins the
+    process, and environments without the ``grib`` group keep a working
+    adapter this way.
     """
     grid = grid_from_dataset(weather)
     payload = {
@@ -316,18 +382,24 @@ class OpenCPNRouter:
             else Path(tempfile.mkdtemp(prefix="lr-opencpn-oracle-"))
         )
         workdir.mkdir(parents=True, exist_ok=True)
-        boat_file = workdir / "polar.csv"
-        self.polar.to_polar_csv(boat_file)
-        wind_file = workdir / "wind_field.json"
-        write_wind_field_json(self.weather, wind_file)
-        scenario_file = workdir / "scenario.json"
-        output_file = workdir / "result.json"
-
+        boat_file = write_boat_files(self.polar, workdir)
         epoch = (
             self.start_datetime if self.start_datetime is not None else SYNTHETIC_EPOCH
         )
         departure = epoch + timedelta(hours=start_time)
-        scenario = build_scenario(start, finish, departure, boat_file, self.config)
+        wind_file = workdir / (
+            "wind_field.grib2" if _eccodes_available() else "wind_field.json"
+        )
+        write_wind_field(self.weather, wind_file, epoch)
+        scenario_file = workdir / "scenario.json"
+        output_file = workdir / "result.json"
+        scenario = OpenCPNScenario(
+            start=start,
+            finish=finish,
+            departure=departure,
+            boat_file=boat_file,
+            config=self.config,
+        ).to_payload()
         scenario_file.write_text(json.dumps(scenario, indent=2))
 
         env = {

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -91,6 +93,19 @@ class WeatherGrid:
             float(self.lats[0]),
             float(self.lats[-1]),
         )
+
+    def to_grib2(self, path: Path, epoch: datetime) -> None:
+        """Write the wind as GRIB2 (the industry exchange format).
+
+        ``epoch`` is the calendar instant (UTC) of weather hour 0; the
+        messages carry it as reference time and the grid's hour axis as
+        forecast steps. Needs the optional ``grib`` dependency group
+        (ecCodes); imported lazily because the model layer must not
+        depend on it at import time.
+        """
+        from light_router.weather_data.grib import write_grib_wind
+
+        write_grib_wind(self, path, epoch)
 
     @staticmethod
     def _clamp(values: np.ndarray, axis: np.ndarray) -> np.ndarray:
