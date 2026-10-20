@@ -417,11 +417,14 @@ class OpenCPNRouter:
             timeout=self.timeout_seconds,
             check=False,
         )
-        if proc.returncode != 0:
+        if proc.returncode not in (0, 3):
             raise RuntimeError(
                 f"OpenCPN oracle binary {self.binary} exited with code "
                 f"{proc.returncode}: {proc.stderr.strip()[-500:]}"
             )
+        # exit 3 is the runner's routing timeout (WR_HEADLESS_TIMEOUT_MS):
+        # the result file still carries the honest timeout outcome, parsed
+        # below into a partial route like any other non-complete result
         if not output_file.exists():
             raise RuntimeError(
                 "OpenCPN oracle binary did not write the result file at "
