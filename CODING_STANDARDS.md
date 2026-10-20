@@ -35,7 +35,11 @@ cannot be checked against a diff, it does not belong here.
 4. **No upward imports.** `models` imports nothing from the package;
    `routing` imports `models`; `weather_data` imports `models`. Nothing in
    `src/` imports `harness`/`simulation`/`reporting` — those live in
-   `experiments/`.
+   `experiments/`. One sanctioned exception: `WeatherGrid.to_grib2` (the
+   GRIB2 serialization symmetry, an explicit maintainer decision) imports
+   its encoder lazily from `weather_data.grib`, which imports `models` at
+   module level — the cycle exists only at call time and both ends are
+   ours. New code does not add exceptions to this rule.
 5. **The public API is a decision.** `light_router/__init__.py` `__all__` is
    the installed surface; adding an entry is deliberate, removing one is a
    breaking change to note in the PR.

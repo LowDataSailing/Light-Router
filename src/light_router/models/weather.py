@@ -103,9 +103,9 @@ class WeatherGrid:
         (ecCodes); imported lazily because the model layer must not
         depend on it at import time.
         """
-        from light_router.weather_data.grib import write_grib_wind
+        from light_router.weather_data.grib import _write_grib_wind
 
-        write_grib_wind(self, path, epoch)
+        _write_grib_wind(self, path, epoch)
 
     @staticmethod
     def _clamp(values: np.ndarray, axis: np.ndarray) -> np.ndarray:

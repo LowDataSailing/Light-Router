@@ -97,7 +97,7 @@ def load_grib_wind(
     return to_cf_dataset(_merge(grids))
 
 
-def write_grib_wind(grid: WeatherGrid, path: Path, epoch: datetime) -> None:
+def _write_grib_wind(grid: WeatherGrid, path: Path, epoch: datetime) -> None:
     """Write the grid's u10/v10 wind as GRIB2 (industry exchange format).
 
     One message per (variable, time step): a regular lat/lon grid with

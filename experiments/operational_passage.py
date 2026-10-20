@@ -55,6 +55,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -83,6 +84,7 @@ from experiments.simulation.simulate import (  # noqa: E402
     run_operational_staircase,
 )
 from light_router.models.forecast import ForecastCycle  # noqa: E402
+from light_router.models.vessel import PolarTable  # noqa: E402
 from light_router.models.weather import route_grid_box  # noqa: E402
 
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
@@ -120,8 +122,8 @@ WIND_LIMIT_SUPPORTED = {"isochrone": True, "opencpn": True, "libweatherrouting":
 
 def build_router(
     name: str,
-    truth,
-    polar,
+    truth: xr.Dataset,
+    polar: PolarTable,
     *,
     max_tws_kt: float | None,
     start_datetime: datetime,
