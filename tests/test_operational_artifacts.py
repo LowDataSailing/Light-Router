@@ -129,7 +129,8 @@ def test_passage_csv_rows(run_dir, results):
     assert lines[0] == (
         "budget,total_package_bytes,cost_eur,cycles,passage_hours,distance_nm,"
         "max_tws_kt,mean_tws_kt,pct_upwind,pct_downwind,"
-        "compute_total_s,compute_mean_s,reached"
+        "compute_total_s,compute_mean_s,reached,"
+        "wind_limit_kt,wind_penalty_hours"
     )
     assert len(lines) == len(passage_results) + 1
     assert lines[1].startswith("unlimited,")
@@ -140,6 +141,41 @@ def test_passage_csv_rows(run_dir, results):
     assert 0.0 < float(row[6]) <= 40.0  # max_tws_kt
     assert 0.0 <= float(row[8]) <= 100.0  # pct_upwind
     assert float(row[10]) >= 0.0  # compute_total_s
+    # no wind limit configured: rows say so, no penalty
+    assert row[13] == "none"
+    assert row[14] == ""
+
+
+def test_passage_csv_wind_penalty(results, tmp_path_factory):
+    """The wind-limited run carries the limit and its cost per budget."""
+    weather, passage_results = results
+    run_dir = new_run_dir(tmp_path_factory.mktemp("runs"), "wind_limit_test")
+    # the same staircase doubles as its own no-limit reference: a
+    # self-reference pins the row mechanics without re-simulating
+    write_operational_artifacts(
+        run_dir,
+        passage_results,
+        weather,
+        scenario="wind_limit_test",
+        start=START,
+        finish=FINISH,
+        router_config=ROUTER_KWARGS,
+        budgets=BUDGETS,
+        source={"type": "operational", "truth": "synthetic"},
+        plots=False,
+        router="IsochroneRouter",
+        wind_limit_kt=30.0,
+        wind_reference=passage_results,
+    )
+    lines = (run_dir / PASSAGE_NAME).read_text().splitlines()
+    # limited rows then reference rows, two per budget
+    assert len(lines) == 2 * len(passage_results) + 1
+    limited = lines[1].split(",")
+    reference = lines[1 + len(passage_results)].split(",")
+    assert limited[13] == "30.0"
+    assert reference[13] == "none"
+    # self-reference: the penalty is exactly zero at every budget
+    assert limited[14] == "+0.00"
 
 
 def test_cycles_csv_rows(run_dir, results):

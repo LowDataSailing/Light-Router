@@ -1,18 +1,38 @@
-"""GRIB2 loading through cfgrib (optional dependency group `grib`).
+"""GRIB2 loading and writing through cfgrib/eccodes (group `grib`).
 
 Returns the canonical CF-compliant xarray Dataset (Compatibility rule 1):
-a new data source is a new loader, nothing downstream changes.
+a new data source is a new loader, nothing downstream changes. The writer
+is the inverse of the loader: the same u10/v10 wind on the same grid,
+encoded GRIB2 (the industry exchange format) via the ecCodes bindings
+cfgrib already depends on.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import xarray as xr
 
 from light_router.dataset import to_cf_dataset
 from light_router.models.weather import WeatherGrid
+
+GRIB_SHORT_NAMES = {"u10": "10u", "v10": "10v"}
+"""Our variable names -> GRIB2 shortName (ecCodes parameter table)."""
+
+
+def _require_eccodes() -> Any:
+    """Import the ecCodes bindings lazily, with an actionable error."""
+    try:
+        import eccodes
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError(
+            "GRIB2 writing requires the optional 'grib' dependency group "
+            "(ecCodes bindings): run `uv sync --group grib`"
+        ) from exc
+    return eccodes
 
 
 def load_grib_wind(
@@ -47,6 +67,11 @@ def load_grib_wind(
                 "filter_by_keys": {"typeOfLevel": "heightAboveGround", "level": 10}
             },
         )
+        # GRIB2 longitudes are 0..360 (ecCodes stores -26 as 334); the
+        # canonical CF convention the repo speaks is [-180, 180).
+        ds = ds.assign_coords(
+            longitude=((ds["longitude"] + 180.0) % 360.0) - 180.0
+        ).sortby("longitude")
         if extent is not None:
             ds = _subset_extent(ds, extent)
         if "time" not in ds["u10"].dims:
@@ -54,6 +79,10 @@ def load_grib_wind(
             ds = ds.expand_dims("time")
         u = np.asarray(ds["u10"].values, dtype=np.float32)
         v = np.asarray(ds["v10"].values, dtype=np.float32)
+        if u.ndim == 4:
+            # one file, one reference time, several lead steps: cfgrib
+            # keeps the singleton reference-time axis (time, step, ...)
+            u, v = u[0], v[0]
         times = _forecast_hours(ds)
         grids.append(
             WeatherGrid(
@@ -66,6 +95,76 @@ def load_grib_wind(
         ds.close()
 
     return to_cf_dataset(_merge(grids))
+
+
+def _write_grib_wind(grid: WeatherGrid, path: Path, epoch: datetime) -> None:
+    """Write the grid's u10/v10 wind as GRIB2 (industry exchange format).
+
+    One message per (variable, time step): a regular lat/lon grid with
+    latitude ascending (``jScansPositively``), 10 m above ground, the
+    reference time set to ``epoch`` (the calendar instant of weather hour
+    0) and the forecast step in whole hours — the layout GFS files use and
+    :func:`load_grib_wind` reads back. Time steps must be whole hours;
+    finer data belongs to a format that carries it.
+    """
+    eccodes = _require_eccodes()
+    fractional = grid.times[np.abs(grid.times - np.round(grid.times)) > 1e-9]
+    if fractional.size:
+        raise ValueError(
+            f"GRIB2 wind writing needs whole-hour steps, got {fractional[:3]}"
+        )
+    dlat = float(grid.lats[1] - grid.lats[0]) if len(grid.lats) > 1 else 0.0
+    dlon = float(grid.lons[1] - grid.lons[0]) if len(grid.lons) > 1 else 0.0
+
+    with open(path, "wb") as stream:
+        for variable, short_name in GRIB_SHORT_NAMES.items():
+            for step, hours in enumerate(grid.times):
+                handle = eccodes.codes_grib_new_from_samples("regular_ll_sfc_grib2")
+                try:
+                    eccodes.codes_set(handle, "shortName", short_name)
+                    # 10 m above ground (the reader filters on this level)
+                    eccodes.codes_set(handle, "typeOfFirstFixedSurface", 103)
+                    eccodes.codes_set(handle, "scaleFactorOfFirstFixedSurface", 0)
+                    eccodes.codes_set(handle, "scaledValueOfFirstFixedSurface", 10)
+                    # geometry: regular ll, both axes ascending
+                    eccodes.codes_set(handle, "Ni", len(grid.lons))
+                    eccodes.codes_set(handle, "Nj", len(grid.lats))
+                    eccodes.codes_set(
+                        handle,
+                        "latitudeOfFirstGridPointInDegrees",
+                        float(grid.lats[0]),
+                    )
+                    eccodes.codes_set(
+                        handle,
+                        "longitudeOfFirstGridPointInDegrees",
+                        float(grid.lons[0]),
+                    )
+                    eccodes.codes_set(
+                        handle,
+                        "latitudeOfLastGridPointInDegrees",
+                        float(grid.lats[-1]),
+                    )
+                    eccodes.codes_set(
+                        handle,
+                        "longitudeOfLastGridPointInDegrees",
+                        float(grid.lons[-1]),
+                    )
+                    eccodes.codes_set(handle, "iDirectionIncrementInDegrees", dlon)
+                    eccodes.codes_set(handle, "jDirectionIncrementInDegrees", dlat)
+                    eccodes.codes_set(handle, "iScansNegatively", 0)
+                    eccodes.codes_set(handle, "jScansPositively", 1)
+                    # reference time = epoch, step = lead hours
+                    eccodes.codes_set(handle, "dataDate", int(epoch.strftime("%Y%m%d")))
+                    eccodes.codes_set(handle, "dataTime", int(epoch.strftime("%H%M")))
+                    eccodes.codes_set(handle, "stepUnits", "h")
+                    eccodes.codes_set(handle, "forecastTime", int(round(float(hours))))
+                    eccodes.codes_set(handle, "bitsPerValue", 16)
+                    eccodes.codes_set_values(
+                        handle, np.ascontiguousarray(grid.data[variable][step])
+                    )
+                    eccodes.codes_write(handle, stream)
+                finally:
+                    eccodes.codes_release(handle)
 
 
 def _subset_extent(

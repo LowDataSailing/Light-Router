@@ -49,11 +49,13 @@ toolchain.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -61,6 +63,12 @@ from experiments.reporting.artifacts import (  # noqa: E402
     new_run_dir,
     write_operational_artifacts,
 )
+from experiments.oracle.libweatherrouting import (  # noqa: E402
+    LibWeatherRoutingConfig,
+    LibWeatherRoutingRouter,
+)
+from experiments.oracle.opencpn import OpenCPNConfig, OpenCPNRouter  # noqa: E402
+from experiments.oracle.validate import OPENCPN_BINARY_ENV  # noqa: E402
 from light_router.weather_data.era5 import fetch_era5_wind_grid  # noqa: E402
 from light_router.weather_data.gfs_archive import download_gfs_archive_wind  # noqa: E402
 from light_router.weather_data.pack import (  # noqa: E402
@@ -69,13 +77,14 @@ from light_router.weather_data.pack import (  # noqa: E402
     write_pack,
 )
 from light_router.weather_data.grib import load_grib_wind  # noqa: E402
-from light_router.routing import IsochroneRouter  # noqa: E402
+from light_router.routing import IsochroneRouter, Router  # noqa: E402
 from experiments.synthetic_polar import synthetic_cruising_polar  # noqa: E402
 from experiments.simulation.simulate import (  # noqa: E402
     format_operational_summary,
     run_operational_staircase,
 )
 from light_router.models.forecast import ForecastCycle  # noqa: E402
+from light_router.models.vessel import PolarTable  # noqa: E402
 from light_router.models.weather import route_grid_box  # noqa: E402
 
 CACHE = Path(__file__).resolve().parents[1] / "data" / "cache"
@@ -102,6 +111,79 @@ def parse_budgets(text: str) -> list[int | None]:
         else:
             budgets.append(int(item))
     return budgets
+
+
+ROUTER_CHOICES = ("isochrone", "libweatherrouting", "opencpn")
+"""The routing models the staircase can drive (Compatibility rule 2)."""
+
+WIND_LIMIT_SUPPORTED = {"isochrone": True, "opencpn": True, "libweatherrouting": False}
+"""Which router implements the protocol-level planning wind limit."""
+
+
+def build_router(
+    name: str,
+    truth: xr.Dataset,
+    polar: PolarTable,
+    *,
+    max_tws_kt: float | None,
+    start_datetime: datetime,
+    opencpn_binary: str | None,
+) -> Router:
+    """Build one router setup for the staircase, at the given wind limit."""
+    if name == "isochrone":
+        return IsochroneRouter.from_dataset(
+            truth,
+            polar,
+            dt_hours=1.0,
+            n_headings=36,
+            bin_deg=0.5,
+            max_points=1200,
+            finish_radius_nm=25.0,
+            max_hours=120.0,  # each cycle's forecast horizon
+            max_tws_kt=max_tws_kt,
+        )
+    if name == "libweatherrouting":
+        if max_tws_kt is not None:
+            raise SystemExit(
+                "--max-tws-kt: libweatherrouting has no planning wind "
+                "limit (LinearBestIsoRouter) - run it without the limit"
+            )
+        return LibWeatherRoutingRouter(
+            polar=polar,
+            config=LibWeatherRoutingConfig(dt_hours=1.0, max_hours=120.0),
+        )
+    if name == "opencpn":
+        if opencpn_binary is None:
+            raise SystemExit(
+                "--router opencpn needs --opencpn-binary (or "
+                f"${OPENCPN_BINARY_ENV}) pointing at the pinned headless "
+                "runner"
+            )
+        return OpenCPNRouter(
+            binary=Path(opencpn_binary),
+            polar=polar,
+            config=OpenCPNConfig(
+                time_step_seconds=3600,
+                max_true_wind_knots=(max_tws_kt if max_tws_kt is not None else 60.0),
+            ),
+            start_datetime=start_datetime,
+        )
+    raise SystemExit(f"unknown router {name!r} (choose from {ROUTER_CHOICES})")
+
+
+def router_config_as_dict(
+    router: Router, max_tws_kt: float | None
+) -> dict[str, float | int | None]:
+    """Manifest config dict for any router (nominal or structural).
+
+    ``max_tws_kt`` is always present under the protocol-level key: the
+    visualizer's wind-limit isoline reads it from the manifest.
+    """
+    if hasattr(router, "config_as_dict"):
+        return router.config_as_dict()
+    config = dict(vars(getattr(router, "config")))
+    config["max_tws_kt"] = max_tws_kt
+    return config
 
 
 def era5_truth(start: date, days: int, extent: tuple[float, float, float, float]):
@@ -191,12 +273,28 @@ def main() -> int:
     )
     parser.add_argument("--budgets", default=DEFAULT_BUDGETS)
     parser.add_argument(
+        "--router",
+        default="isochrone",
+        choices=ROUTER_CHOICES,
+        help="routing model for the staircase: the in-repo surrogate "
+        "(default), libweatherrouting (optional 'oracle' group), or the "
+        "pinned OpenCPN headless build (needs --opencpn-binary)",
+    )
+    parser.add_argument(
+        "--opencpn-binary",
+        default=None,
+        help="executable driving the pinned OpenCPN oracle (a wrapper "
+        f"script around its docker image); default: ${OPENCPN_BINARY_ENV}",
+    )
+    parser.add_argument(
         "--max-tws-kt",
         type=float,
         default=None,
         help="planning wind limit (kt): candidates the router would place "
         "in stronger wind are unsailable, so the plan dodges them; None "
-        "(default) keeps the Level 1 behavior - no upper limit",
+        "(default) keeps the Level 1 behavior - no upper limit. When the "
+        "router supports it, a no-limit reference staircase runs too and "
+        "the passage artifacts carry the wind penalty per budget",
     )
     parser.add_argument(
         "--price-per-kb",
@@ -266,18 +364,19 @@ def main() -> int:
     )
 
     polar = synthetic_cruising_polar()
-    router = IsochroneRouter.from_dataset(
+    start_datetime = datetime.strptime(run_start_date, "%Y-%m-%d").replace(
+        tzinfo=timezone.utc
+    )
+    opencpn_binary = args.opencpn_binary or os.environ.get(OPENCPN_BINARY_ENV)
+    router = build_router(
+        args.router,
         truth,
         polar,
-        dt_hours=1.0,
-        n_headings=36,
-        bin_deg=0.5,
-        max_points=1200,
-        finish_radius_nm=25.0,
-        max_hours=120.0,  # each cycle's forecast horizon
         max_tws_kt=args.max_tws_kt,
+        start_datetime=start_datetime,
+        opencpn_binary=opencpn_binary,
     )
-    polar = synthetic_cruising_polar()
+    print(f"router: {router.name}")
     results = run_operational_staircase(
         truth,
         cycles,
@@ -291,6 +390,33 @@ def main() -> int:
         max_hours=args.max_passage_hours,
     )
 
+    # Wind penalty: with a planning wind limit, run the same staircase
+    # without it, so each budget's passage artifacts carry the time the
+    # limit costs (eta limited - eta free).
+    reference_results = None
+    if args.max_tws_kt is not None and WIND_LIMIT_SUPPORTED[args.router]:
+        reference_router = build_router(
+            args.router,
+            truth,
+            polar,
+            max_tws_kt=None,
+            start_datetime=start_datetime,
+            opencpn_binary=opencpn_binary,
+        )
+        print(f"wind-penalty reference: {reference_router.name}, no wind limit")
+        reference_results = run_operational_staircase(
+            truth,
+            cycles,
+            start_pos,
+            finish_pos,
+            reference_router,
+            polar,
+            budgets,
+            dt_hours=1.0,
+            finish_radius_nm=25.0,
+            max_hours=args.max_passage_hours,
+        )
+
     print(format_operational_summary(results, price_per_kb=args.price_per_kb))
 
     if args.artifacts:
@@ -302,7 +428,7 @@ def main() -> int:
             scenario=args.scenario,
             start=start_pos,
             finish=finish_pos,
-            router_config=router.config_as_dict(),
+            router_config=router_config_as_dict(router, args.max_tws_kt),
             budgets=budgets,
             source={
                 "type": "operational",
@@ -316,6 +442,8 @@ def main() -> int:
             polar=polar,
             polar_source="synthetic_cruising_polar",
             price_per_kb=args.price_per_kb,
+            wind_limit_kt=args.max_tws_kt,
+            wind_reference=reference_results,
         )
         print(f"\nartifacts written to {run_dir}")
     return 0

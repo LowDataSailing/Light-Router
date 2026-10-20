@@ -62,12 +62,19 @@ docs = [
 ]
 grib = [
     "cfgrib>=0.9.10.4",
+    "eccodes>=1.7.0",
 ]
 artifacts = [
     "gpxpy>=1.6",
 ]
 plot = [
     "matplotlib>=3.7",
+]
+# Oracle reference routers (issue #22). Optional on purpose: libweatherrouting
+# is GPLv3, so it must never be a core dependency and is imported lazily
+# inside experiments/oracle/libweatherrouting.py only.
+oracle = [
+    "weatherrouting>=0.2.3",
 ]
 # ml = [
 #     "scikit-learn>=1.2.0",
